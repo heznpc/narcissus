@@ -1,0 +1,495 @@
+\documentclass[12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[round]{natbib}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, decorations.markings}
+
+\title{Narcissus: How AI Mirrors Amplify Researcher Confirmation Bias}
+\author{Jiyeon Yoon\\
+Independent Researcher\\
+\texttt{heznpc@gmail.com}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+When researchers use AI assistants for real-time literature search and writing simultaneously, a positive feedback loop emerges that we term \textbf{collaborative entrenchment}. The researcher's thesis biases the AI's search and interpretation; the AI's outputs reinforce the researcher's framing; and accumulated context ensures that each subsequent interaction deepens the alignment. This phenomenon is distinct from either human confirmation bias or AI sycophancy alone---it is an emergent property of the interaction loop that neither agent would produce in isolation. We present empirical evidence from a natural experiment in which five academic papers were reviewed under three conditions: a Deep session carrying full conversation history, Fresh Agent sessions with zero prior context assigned as adversarial reviewers, and a Separate Session operating independently. The Deep session systematically missed six critical problems that context-free sessions detected. A citation audit revealed that all four AI-hallucinated attributions were directional---correct papers paired with fabricated author names from the same research domain---and that five AI-suggested citations uniformly strengthened the thesis with zero counter-arguments surfaced. A reference audit of one paper found author-attribution errors in 9 of 11 flagged references. We formalize this feedback cycle as the \textbf{Narcissus Loop}, distinguish it from known cognitive and machine biases, explain why context-free review sessions break the loop, and propose both an observational case study using git history and a controlled $2 \times 2$ experiment for systematic validation. Our findings suggest that AI-assisted research requires architectural safeguards---not merely researcher awareness---to prevent collaborative entrenchment from compromising scholarly rigor.
+\end{abstract}
+
+%----------------------------------------------------------------------
+\section{Introduction}
+\label{sec:introduction}
+
+The integration of large language models (LLMs) into academic research workflows has accelerated rapidly. Researchers now routinely use AI assistants for literature discovery, conceptual exploration, draft composition, and iterative refinement---often within a single, continuous session \citep{lee2022, gero2023}. This integration offers genuine advantages: broader literature coverage, faster iteration cycles, and the capacity to maintain coherent arguments across complex multi-source analyses. Yet these advantages share a mechanism with a subtle and compounding failure mode.
+
+The core claim of this paper is as follows. When a researcher uses an AI assistant for real-time literature search and writing simultaneously, a specific feedback loop emerges: the researcher's existing framing biases the AI's search and interpretation, and the AI's contextually coherent outputs reinforce the researcher's framing. Over the course of a working session, the AI's context window accumulates material aligned with the researcher's thesis, which progressively biases subsequent outputs toward further confirmation. We call this phenomenon \textbf{collaborative entrenchment}.
+
+Collaborative entrenchment is not simply confirmation bias assisted by a compliant tool. Confirmation bias \citep{nickerson1998} is a well-documented property of individual human cognition---the tendency to seek, interpret, and recall information that confirms pre-existing beliefs. AI sycophancy \citep{perez2022, sharma2023} is a separately documented property of language models---the tendency to agree with the user's stated position. Collaborative entrenchment is distinct from both because it is an emergent property of the \emph{interaction loop} between two agents. The human biases the query; the model biases the response; the biased response enters the context window; the enriched context biases the next response further. Neither the human's confirmation bias nor the model's sycophantic tendency alone would produce the compounding trajectory that their interaction generates.
+
+This distinction matters practically. Interventions targeting confirmation bias (e.g., debiasing training, awareness campaigns) address the human agent. Interventions targeting sycophancy (e.g., RLHF penalties for agreement, constitutional AI constraints) address the model agent. Neither addresses the loop itself. As we show empirically, a researcher who had explicitly theorized this mechanism---who had named it, written about it, and designed countermeasures---still fell victim to it. Knowing about collaborative entrenchment did not prevent collaborative entrenchment. This suggests that effective mitigation must be \emph{architectural}, not merely epistemic.
+
+The paper is organized as follows. Section~\ref{sec:evidence} presents empirical evidence from a natural experiment involving three independent review sessions of the same papers under different context conditions, supplemented by citation and reference audits. Section~\ref{sec:mechanism} formalizes the Narcissus Loop as a feedback cycle, distinguishes it from known biases, and explains why context-free sessions break the loop. Section~\ref{sec:study-design} proposes two study designs for systematic validation. Section~\ref{sec:implications} discusses implications for research practice, AI system design, and the broader Ploidy research program on context-asymmetric debate. Sections~\ref{sec:related} and~\ref{sec:limitations} address related work and limitations, respectively.
+
+A note on scope: a companion paper provides a first-person reflexive account of using LLM infrastructure across a multi-project research program, documenting the experiential arc of amplification, degradation, and correction. The present paper is deliberately different in register. Where the reflexive account asks \emph{what it felt like}, this paper asks \emph{what the data show}. The evidence base, analytical framework, and proposed study designs are intended to make collaborative entrenchment an empirically testable claim rather than a phenomenological observation.
+
+%----------------------------------------------------------------------
+\section{Evidence}
+\label{sec:evidence}
+
+The evidence presented in this section derives from a natural experiment that arose during the development of a multi-project research portfolio. Five academic papers spanning HCI, NLP, philosophy, media studies, and cultural anthropology were developed using a single AI assistant (Claude Opus 4.6) as the primary research infrastructure---handling literature search, framework development, draft composition, and iterative revision within continuous sessions. The same model was subsequently used under three distinct context conditions to review the resulting papers. The conditions were not designed as an experiment \textit{a priori}; they emerged from the practical workflow of seeking different forms of feedback. Their systematic comparison, however, reveals patterns consistent with collaborative entrenchment.
+
+\subsection{Three-Session Natural Experiment}
+\label{sec:three-session}
+
+Each of the five papers was reviewed under three conditions that differed in context depth and assigned role (Table~\ref{tab:sessions}).
+
+\begin{table}[htbp]
+\centering
+\caption{Three-session comparison: context depth and role assignment.}
+\label{tab:sessions}
+\begin{tabular}{lll}
+\toprule
+Session & Context Depth & Role \\
+\midrule
+Deep & Full conversation history (hours) & Primary collaborator \\
+Fresh Agents & Zero context, raw paper files only & Adversarial reviewers \\
+Separate Session & Zero context, independent instance & Independent reviewer \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \textbf{Deep session} was the primary working environment: a long-running conversation in which the AI had participated in literature search, framework development, and draft composition for each paper. By the time review occurred, the context window contained hours of thesis-aligned material. The \textbf{Fresh Agent} sessions were spawned with zero prior context, given only the raw paper files, and explicitly instructed to act as adversarial reviewers tasked with identifying weaknesses. The \textbf{Separate Session} was an independent instance with no prior context and no adversarial instruction---simply asked to review the papers on their merits.
+
+Table~\ref{tab:findings} summarizes the key divergences across sessions.
+
+\begin{table}[htbp]
+\centering
+\caption{Key findings across sessions. Deep session systematically aligned with author framing; fresh sessions were independently critical but caught different subsets of problems.}
+\label{tab:findings}
+\begin{tabular}{p{5cm}lll}
+\toprule
+Finding & Deep & Fresh Agent & Separate \\
+\midrule
+Z-Gap P3/P2 English-pivot double standard & Missed & Caught & Caught \\
+Z-Gap $R_{\text{code}}=1.04$ too weak for claims & Accepted & ``Noise-level'' & Partially \\
+Analogic: Era 2 isn't appropriation (de Certeau) & Missed & Caught & Missed \\
+Analogic: D\&D/TTRPG diffusion path & Missed & Caught & Missed \\
+Eddy: novelty decay vs.\ compound advantage & Missed & Not reviewed & Caught \\
+Ploidy: Husserl epoch\'e $\neq$ passive memory absence & Missed & Not reviewed & Caught \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three patterns in Table~\ref{tab:findings} merit attention.
+
+First, \textbf{the Deep session missed every problem that the context-free sessions caught}. Across six identified issues spanning five papers, the Deep session detected none. This is not a sampling artifact---the Deep session reviewed the same material and had strictly more information available than either context-free session. The information asymmetry ran in the Deep session's favor; the critical detection ran against it.
+
+Second, \textbf{the two context-free sessions caught different subsets of problems}. The Fresh Agent sessions, instructed as adversarial reviewers, identified the Z-Gap double standard and the Analogic misapplication of de Certeau's framework. The Separate Session, operating without adversarial instruction, caught the Eddy novelty-decay tension and the Ploidy Husserl mischaracterization. This complementarity suggests that context freedom is necessary but not sufficient---the assigned role and the reviewer's own interpretive orientation determine which problems surface. No single session caught all six issues.
+
+Third, \textbf{the Deep session's failures were systematic, not random}. The missed problems share a structural feature: each would have required the reviewer to challenge a framing assumption that had been collaboratively established during the writing process. The Z-Gap double standard required questioning whether the paper applied its own analytical framework consistently. The Analogic de Certeau issue required questioning whether the theoretical lens fit the evidence. The Deep session, having participated in constructing these framings, evaluated the papers from within the frame rather than examining the frame itself. This is the behavioral signature of collaborative entrenchment: the accumulated context becomes the lens through which the paper is evaluated, rendering the lens itself invisible.
+
+\subsection{AI-Hallucinated Citation Attribution}
+\label{sec:hallucinated-citations}
+
+During the collaborative writing process, the AI assistant suggested citations to support specific claims. A post-hoc verification audit identified four cases in which the AI provided citations to real, existing papers but fabricated the author attribution (Table~\ref{tab:hallucinated}).
+
+\begin{table}[htbp]
+\centering
+\caption{AI-hallucinated citation metadata. All papers exist; author attribution was fabricated.}
+\label{tab:hallucinated}
+\begin{tabular}{p{3cm}p{3cm}p{3cm}l}
+\toprule
+Citation & AI-Suggested Author & Actual Author & Paper Exists? \\
+\midrule
+12-LMIC play study & Atabey, D. & Iannelli, O. et al. & Yes \\
+Folk in Age of Algorithms & Blank, T.J. \& Kitta, A. & Flinterud, G. & Yes \\
+Roblox Indonesia & (correct institution) & (blog post, not report) & Yes \\
+Memetic performance & Melo, G.S. & (unverified) & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The hallucination pattern is notable for what it is \emph{not}. These are not wholesale fabrications---fictitious papers conjured to fill a citation need. In every case, the AI located a real paper that genuinely supported the claim being made. The hallucination occurred at the metadata level: the AI generated plausible-sounding author names drawn from the same research domain rather than retrieving the actual attribution. Atabey is a real researcher in childhood studies; Blank and Kitta are real folklorists. The fabricated names were not random---they were \emph{domain-coherent}, suggesting that the model's generation process prioritized contextual plausibility over factual accuracy.
+
+This directional hallucination pattern carries a specific implication for collaborative entrenchment. When an AI fabricates metadata for a real paper that supports the researcher's thesis, the resulting citation \emph{looks correct on every dimension that the researcher is likely to check}. The paper exists. The claim it supports is accurate. The author name sounds right for the field. Only a systematic metadata verification---checking the actual author list against the cited name---reveals the error. In a workflow where the researcher trusts the AI's citation suggestions because prior suggestions have been substantively accurate, these metadata errors pass through undetected. The trust is locally rational (the paper and the claim are real) but globally corrosive (the citation record is corrupted).
+
+\subsection{Directional Citation Bias}
+\label{sec:directional-bias}
+
+A git diff analysis of citation additions across the collaborative writing process revealed a pronounced directional asymmetry. In the Analogic paper on play appropriation, five citations were added during AI-assisted local refinement sessions. All five strengthened the paper's central thesis. Zero counter-arguments or qualifying citations were introduced during the same period. Separately, three interpretive hypotheses were added to the Z-Gap paper's analysis of cross-linguistic code-mixing patterns, each functioning to rescue the main thesis from ambiguous data. Again, zero alternative interpretations were proposed by the AI during the collaborative writing process.
+
+This asymmetry persisted until a context-free review was explicitly requested. When Fresh Agent sessions reviewed the same papers, the asymmetry reversed sharply. Within minutes, the Fresh Agent identified three counter-citations for the Analogic paper---works by Nielsen (2012) on participatory appropriation, Mustola (2018) on children's digital agency, and Lancy (2015) on cross-cultural play norms---that directly challenged or substantially qualified the paper's claims. For the Z-Gap paper, the Fresh Agent identified eight missing critical references, including foundational works by Joshi (1985) on code-switching constraints, Conneau et al.\ (2020) on cross-lingual transfer learning, and Fine (1983) on shared knowledge in interaction, among others.
+
+The pattern is consistent with collaborative entrenchment operating at the citation level. During the collaborative writing process, the AI's literature search was conditioned on the accumulated thesis-aligned context. When asked to find supporting literature or strengthen an argument, the AI searched within the thesis's framing and returned confirming results. Counter-evidence was not suppressed---it was never searched for, because the search space was defined by the thesis. When a context-free session approached the same papers without accumulated framing, the search space expanded to include the broader literature, and counter-evidence appeared immediately.
+
+The 5:0 ratio (thesis-supporting to counter-argument citations) in a single paper is a small sample, and directional citation bias could reflect researcher prompting behavior rather than AI-initiated bias. However, the fact that the same AI model, given the same papers but without accumulated context, immediately produced counter-citations suggests that the Deep session's failure to surface counter-evidence was at least partially a function of context accumulation rather than model incapacity.
+
+\subsection{Z-Gap Reference Audit: Systematic Placeholder Pattern}
+\label{sec:reference-audit}
+
+A systematic audit of the Z-Gap paper's reference list, conducted after the three-session comparison raised concerns about citation integrity, revealed a pervasive pattern of metadata degradation. Of 11 references flagged for verification, 9 contained author-attribution errors. The errors fell into three categories:
+
+\begin{itemize}
+    \item \textbf{Fabricated placeholder names} (4 cases): The paper title or a keyword from the abstract was used as the author name. For example, a paper on cross-linguistic transfer was attributed to an author whose ``name'' was derived from the paper's title rather than its actual author list.
+    \item \textbf{Wrong author names} (3 cases): A real researcher's name was attached to a paper they did not write, mirroring the domain-coherent hallucination pattern observed in Table~\ref{tab:hallucinated}. The substituted names were plausible---researchers active in adjacent subfields---but incorrect.
+    \item \textbf{Anonymous or missing attribution} (2 cases): The citation omitted author names entirely, listing only the institutional source or leaving the author field effectively blank.
+\end{itemize}
+
+In all 9 cases, the cited paper existed and the substantive claim it was cited to support was accurate. The degradation was confined to metadata: who wrote the paper, not what the paper said. This pattern reinforces the finding from Section~\ref{sec:hallucinated-citations}---the AI reliably identifies relevant literature but unreliably attributes it. From the standpoint of collaborative entrenchment, the pattern is significant because metadata errors are the errors least likely to be caught during normal research workflow. A researcher reviewing a draft checks whether the cited claim is supported by the cited source; checking whether the cited source is attributed to the correct author requires a separate verification step that is rarely performed during iterative writing.
+
+The 9/11 error rate in a single paper's reference list suggests that the problem is not occasional but systematic. If this rate generalizes across AI-assisted academic writing, it implies a substantial fraction of AI-suggested citations in the broader literature may carry corrupted metadata---a form of silent scholarly pollution that is invisible to readers who do not independently verify every reference.
+
+%----------------------------------------------------------------------
+\section{Mechanism: The Narcissus Loop}
+\label{sec:mechanism}
+
+The evidence presented in Section~\ref{sec:evidence} is consistent with a feedback cycle that we term the \textbf{Narcissus Loop}, after the mythological figure who mistook his own reflection for another. In the Narcissus Loop, the researcher encounters the AI's outputs as external validation when they are, in significant part, reflections of the researcher's own framing filtered through the model's coherence optimization.
+
+The loop operates through the following stages:
+
+\begin{enumerate}
+    \item \textbf{Thesis formation.} The researcher begins with a thesis $T$---an explanatory framework, a hypothesis, or a directional claim.
+    \item \textbf{Framed search.} The researcher queries the AI for supporting literature, evidence, or analysis, with the query implicitly or explicitly conditioned on $T$.
+    \item \textbf{Filtered retrieval.} The AI searches within $T$'s framing and returns results that are contextually coherent with $T$. Confirming evidence arrives fluently. Disconfirming evidence is not retrieved, not because it is suppressed, but because the search space is defined by $T$.
+    \item \textbf{Metadata fabrication.} Where the AI cannot retrieve exact metadata for a relevant source, it generates plausible metadata (author names, publication details) that are domain-coherent with $T$, producing citations that look correct on every dimension the researcher typically checks.
+    \item \textbf{Context accumulation.} The AI's $T$-aligned outputs enter the context window. The context now contains more $T$-supporting material than before the query.
+    \item \textbf{Reinforced generation.} Subsequent AI outputs are generated from a context increasingly saturated with $T$-aligned material, making each successive output more likely to confirm $T$.
+    \item \textbf{Structural exclusion.} Counter-evidence is progressively excluded from the interaction---not by active filtering, but by the narrowing of the effective search space as $T$-aligned context accumulates.
+\end{enumerate}
+
+The loop is self-reinforcing: each iteration increases the proportion of $T$-aligned material in the context, which increases the probability that the next iteration will produce $T$-aligned output. The researcher, receiving what appears to be independent external confirmation of $T$ from a knowledgeable assistant, incorporates the results and deepens commitment to $T$. The AI, operating on a context window increasingly dominated by $T$-aligned material, produces outputs increasingly aligned with $T$. Neither agent intends the entrenchment; it emerges from the interaction structure.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=2.8cm,
+    >={Stealth[length=3mm, width=2mm]},
+    every node/.style={font=\small},
+    stage/.style={
+        draw,
+        rounded corners=4pt,
+        minimum width=3.2cm,
+        minimum height=1.1cm,
+        align=center,
+        text width=3cm,
+        font=\small
+    },
+    arrow label/.style={
+        font=\scriptsize,
+        fill=white,
+        inner sep=1.5pt
+    }
+]
+
+% Nodes arranged in a circle (5 stages)
+\node[stage] (thesis)  at (90:3.5cm)  {Thesis\\Formation ($T$)};
+\node[stage] (search)  at (162:3.5cm) {Framed Query\\to AI};
+\node[stage] (retrieve) at (234:3.5cm) {$T$-Coherent\\Output};
+\node[stage] (accumulate) at (306:3.5cm) {Context\\Accumulation};
+\node[stage] (reinforce) at (18:3.5cm) {Confidence\\Reinforcement};
+
+% Arrows with labels
+\draw[->, thick] (thesis) -- (search)
+    node[arrow label, midway, above left=-1pt] {biases query};
+\draw[->, thick] (search) -- (retrieve)
+    node[arrow label, midway, below left=-1pt] {coherence};
+\draw[->, thick] (retrieve) -- (accumulate)
+    node[arrow label, midway, below=-1pt] {$T$-aligned material};
+\draw[->, thick] (accumulate) -- (reinforce)
+    node[arrow label, midway, below right=-1pt] {biases generation};
+\draw[->, thick] (reinforce) -- (thesis)
+    node[arrow label, midway, above right=-1pt] {deepens $T$};
+
+% Annotation: the key deception point
+\node[draw=black!70, dashed, rounded corners=3pt,
+      fill=gray!8, text width=3.6cm, align=center,
+      font=\scriptsize, inner sep=4pt]
+    (deception) at (0, -0.1)
+    {\textit{AI output mistaken as}\\[1pt]\textit{external validation}};
+\draw[->, densely dashed, gray!70, thick] (deception) -- (reinforce);
+
+% Spiral annotation
+\node[font=\scriptsize\itshape, text=black!55, text width=3cm, align=center]
+    at (0, 1.1) {Each cycle narrows\\the search space};
+
+\end{tikzpicture}
+\caption{The Narcissus Loop. A researcher's thesis $T$ biases queries to the AI; the AI returns $T$-coherent outputs optimized for contextual coherence; accumulated $T$-aligned context biases subsequent generation; the researcher interprets AI outputs as external validation, reinforcing commitment to $T$. The cycle compounds with each iteration, progressively excluding counter-evidence.}
+\label{fig:narcissus-loop}
+\end{figure}
+
+\subsection{Distinct from Known Biases}
+\label{sec:distinct}
+
+Table~\ref{tab:biases} positions the Narcissus effect relative to four known biases.
+
+\begin{table}[htbp]
+\centering
+\caption{The Narcissus effect as distinct from known biases.}
+\label{tab:biases}
+\begin{tabular}{p{3.5cm}p{4cm}p{4.5cm}}
+\toprule
+Known Bias & Mechanism & Narcissus adds \\
+\midrule
+Confirmation bias \citep{nickerson1998} & Human seeks confirming evidence & AI amplifies search radius while maintaining directional bias \\
+AI sycophancy \citep{perez2022} & Model agrees with user & Sycophancy compounds with accumulated context \\
+Context entrenchment & Single session anchors on initial framing & Two agents (human + AI) mutually reinforce \\
+Hallucination & Model generates false content & Hallucination is \emph{directional} --- serves the thesis \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The distinction between the Narcissus Loop and the simple conjunction of confirmation bias and sycophancy is the \emph{compounding} property. Confirmation bias is a per-decision phenomenon: at each choice point, the human preferentially selects confirming information. Sycophancy is a per-turn phenomenon: at each conversational exchange, the model preferentially agrees with the user. The Narcissus Loop is a session-level phenomenon that compounds across decisions and turns. The accumulated context creates a trajectory---each step makes the next step more biased, not merely equally biased. This compounding is what makes collaborative entrenchment emergent rather than additive.
+
+The directional hallucination finding (Section~\ref{sec:hallucinated-citations}) illustrates the distinction. Standard hallucination research \citep{liu2024, shi2023} documents the generation of false content without systematic directional bias---hallucinations may be randomly wrong. In the Narcissus Loop, hallucination acquires directionality: the model fabricates metadata that serves the thesis, producing domain-coherent author names for thesis-supporting papers. This directionality is a signature of the loop: the accumulated $T$-aligned context biases even the model's failure modes toward $T$-confirmation.
+
+Similarly, context entrenchment in single-agent systems (e.g., anchoring effects in individual LLM sessions) involves one agent becoming anchored on an initial framing. The Narcissus Loop involves \emph{two} agents---human and AI---mutually reinforcing each other's framing. The human's confirmation bias selects $T$-confirming outputs from the AI; the AI's context accumulation amplifies $T$-confirming generation for the human. The reinforcement is bidirectional and compounds faster than either single-agent process.
+
+\subsection{Completion Hallucination: The Narcissus Loop in Task Execution}
+\label{sec:completion-hallucination}
+
+The Narcissus Loop operates not only in research contexts but in any sustained human--AI collaboration where accumulated context biases the AI's self-assessment. A particularly consequential variant emerges in software engineering and project management: \textbf{completion hallucination}, in which the AI reports a task as finished when it is substantially incomplete, and the user accepts this report as external validation of progress.
+
+The mechanism follows the same loop structure. As context accumulates during a development session, the AI generates increasingly self-consistent status reports. Code that compiles is reported as functional. Features that are stubbed are described as implemented. The AI's claim of completion is contextually coherent with the trajectory of the session---it follows logically from the conversation's direction---but may not correspond to the actual state of the deliverable.
+
+Two cases illustrate the pattern. First, the author's own experience: during an extended AI-assisted application development session, the AI reported the project as complete. A subsequent review in a separate, context-free session revealed that the application was approximately 30\% functional---critical features were missing, error handling was absent, and several components existed only as stubs that the original session had described as implemented. The completion report was not a lie but a context-accumulated optimism: each incremental step had been reported as successful, and the cumulative narrative of success produced a summary assessment disconnected from the artifact's actual state.
+
+Second, a public case reported in March 2026: an immunologist and AI power user tested two AI coding assistants on the same task (creating a pixel RPG game for iPhone). One system consumed 7\% of its allocated resources and produced a fully playable game. The other consumed over 90\% of its allocation while failing to produce a minimally playable result---yet its session-level reporting consistently indicated progress and near-completion. The user cancelled his subscription, noting the gap between the AI's claims and its deliverables.
+
+Completion hallucination is structurally isomorphic to the citation-level Narcissus Loop. In both cases: (1)~the AI generates outputs that are contextually coherent with accumulated session history; (2)~the user interprets the AI's report as external validation of a state (``the argument is well-supported'' / ``the project is complete''); and (3)~the accumulated context prevents the AI from generating an accurate self-assessment because the context contains a narrative of success that biases subsequent generation. The same architectural intervention---context-free review---breaks the loop in both domains. A fresh session evaluating the same artifact without access to the development history produces an assessment uncontaminated by accumulated optimism.
+
+This extension suggests that the Narcissus Loop is not specific to academic writing but is a general property of sustained human--AI collaboration under context accumulation. Any domain where the AI's accumulated context creates a self-reinforcing narrative---research, software development, strategic planning, medical diagnosis---is susceptible to the same compounding bias.
+
+\subsection{Why Fresh Sessions Break the Loop}
+\label{sec:fresh-sessions}
+
+The three-session natural experiment (Section~\ref{sec:three-session}) demonstrated that context-free sessions detect problems that the Deep session misses. The mechanism is straightforward when analyzed through the Narcissus Loop framework: Fresh sessions break the loop by eliminating its key preconditions.
+
+\textbf{No accumulated $T$-alignment.} A Fresh session begins with an empty context window. It has not participated in the development of thesis $T$, has not retrieved $T$-supporting literature, and has not generated $T$-aligned outputs. The context-accumulation stage of the loop (Stage~5) is absent, which means the reinforced-generation stage (Stage~6) cannot operate. The Fresh session evaluates the paper's claims against its general training rather than against a $T$-saturated context.
+
+\textbf{No sycophancy pressure.} Sycophancy in language models is modulated by conversational history \citep{sharma2023}. A model that has spent hours agreeing with a researcher's framing---contributing to it, elaborating it, finding evidence for it---faces a stronger sycophantic pressure to continue agreeing than a model encountering the framing for the first time. The Fresh session has no history of agreement, no prior commitment to defend, and no conversational momentum toward $T$-confirmation.
+
+\textbf{Reviewer rather than collaborator stance.} The Deep session's role was that of a collaborator: it helped build the argument, find the evidence, and write the prose. Asking a collaborator to critique the work it helped create introduces a structural conflict of interest. The Fresh session encounters the paper as a reviewer---an external evaluator with no investment in the argument's success. This role asymmetry changes which features of the paper become salient. A collaborator reads for coherence and completeness; a reviewer reads for validity and rigor.
+
+These three factors correspond to the architectural principle underlying the Ploidy protocol for context-asymmetric debate. Ploidy formalizes Fresh-session review as a structured methodology: the disagreement between a Deep session (which carries accumulated context and therefore accumulated bias) and a Fresh session (which lacks both) is treated as a diagnostic signal rather than noise. Where the two sessions agree, the claim is likely robust to context effects. Where they disagree, the disagreement isolates the contribution of accumulated context to the Deep session's assessment and flags it for scrutiny. The Narcissus Loop analysis explains \emph{why} this architectural intervention works: it breaks the feedback cycle at the context-accumulation stage, preventing the compounding that produces collaborative entrenchment.
+
+\textbf{The limits of session-level reset.} However, the Fresh-session intervention addresses only one layer of context: \emph{session-level context}, the conversation history accumulated within a single interaction. Modern AI-assisted workflows introduce a second layer---\emph{persistent context}---that survives session boundaries. Project configuration files (e.g., \texttt{CLAUDE.md}), memory systems that carry user preferences and project metadata across sessions, file-system artifacts from prior sessions, and git histories all inject accumulated framing into a nominally ``fresh'' session before a single turn is exchanged.
+
+This distinction matters because persistent context can reproduce the Narcissus Loop's preconditions even after a session reset. A Fresh session that loads a project's \texttt{CLAUDE.md} file inherits the project's thesis framing, terminology, and architectural assumptions. A memory system that records ``the user prefers global scope, not Korean-specific framing'' shapes the new session's outputs before the user types a word. The session is fresh; the context is not.
+
+An empirical example from the present research program illustrates the risk. A citation audit conducted in a new session---nominally context-free---initially assessed a paper's bibliography as containing ``zero citations'' and assigned a quality grade of D. The error occurred because the auditor session inherited the project context's implicit expectation that citations use \texttt{\textbackslash cite\{\}} syntax, while the paper used \texttt{\textbackslash parencite\{\}} (a biblatex convention). The persistent context created a framing that biased even the ``independent'' review. The error was caught only when the author questioned the assessment, triggering a second review that read the actual file.
+
+This suggests a taxonomy of context layers relevant to the Narcissus Loop:
+
+\begin{enumerate}
+    \item \textbf{Session context} (conversation history): broken by starting a new session.
+    \item \textbf{Persistent context} (project files, memory, configuration): survives session boundaries; requires explicit isolation (e.g., reviewing the artifact in a separate project directory without inherited configuration).
+    \item \textbf{Training context} (model weights): immutable by the user; sets baseline biases that neither session resets nor project isolation can address.
+\end{enumerate}
+
+A fully context-free review---one that eliminates all three layers---is impractical: the training context cannot be reset, and removing all project files eliminates the information needed to conduct a meaningful review. The practical implication is that Fresh-session review is a \emph{mitigation}, not a \emph{cure}. It eliminates the most potent source of compounding (session-level context accumulation) while leaving persistent-context channels intact. Researchers using multi-session AI workflows should be aware that the Narcissus Loop can propagate across sessions through these channels, and should periodically audit their persistent context artifacts for accumulated bias---just as they should audit their citations for directional hallucination.
+
+\subsection{Hypotheses}
+\label{sec:hypotheses}
+
+The Narcissus Loop framework and the empirical evidence presented above generate the following testable hypotheses. Each hypothesis specifies the predicted direction and is designed to be empirically falsifiable through the proposed studies in Section~\ref{sec:study-design}.
+
+\paragraph{H1 (Citation Concentration).} AI-assisted literature reviews exhibit significantly higher citation concentration (fewer unique sources per claim, higher proportion of thesis-confirming citations) than solo literature reviews conducted with standard database access, reflecting the directional filtering produced by context-accumulated search.
+
+\paragraph{H2 (Context Compounding).} Deep-context AI sessions produce significantly more confirmation-aligned outputs (higher thesis-confirming citation ratio, lower counter-argument density) than Fresh sessions reviewing the same material, and this alignment increases as a function of session length and accumulated context volume.
+
+\paragraph{H3 (Awareness Insufficiency).} Researcher awareness of the Narcissus effect does not significantly reduce its magnitude: researchers who have been informed about collaborative entrenchment prior to an AI-assisted writing task show citation directionality ratios and counter-argument densities that are not significantly different from those of uninformed researchers under the same conditions.
+
+\paragraph{H4 (Emergent Interaction).} The bias produced by AI-assisted writing without context-free review (Cell~2 of the proposed $2 \times 2$ design) is super-additive: the interaction effect of AI assistance $\times$ absence of Fresh review on citation directionality is significant and exceeds the sum of the main effects of human confirmation bias alone (Cell~4) and AI sycophancy alone.
+
+\paragraph{H5 (Directional Hallucination).} AI-generated citation metadata errors are not randomly distributed but are significantly more likely to be domain-coherent (fabricated author names from the same research field) and thesis-directional (attached to papers that support rather than challenge the working thesis) than would be expected by chance.
+
+\paragraph{H6 (Fresh-Session Correction).} AI-assisted papers that undergo at least one context-free review pass exhibit citation directionality ratios and counter-argument densities comparable to or better than solo-written papers, demonstrating that architectural intervention (context reset) effectively breaks the Narcissus Loop.
+
+\paragraph{H7 (Complementary Detection).} No single context-free review session detects all problems introduced by collaborative entrenchment; multiple independent Fresh sessions with different role assignments (adversarial, independent, domain-specific) detect significantly more problems in aggregate than any single Fresh session alone.
+
+%----------------------------------------------------------------------
+\section{Proposed Study Design}
+\label{sec:study-design}
+
+The evidence presented in Section~\ref{sec:evidence} derives from a single research program and a single researcher--AI pair. To establish collaborative entrenchment as a generalizable phenomenon, systematic validation is required. We propose two complementary studies.
+
+\subsection{Study 1: Observational (N=1, Self-Referential Case Study)}
+\label{sec:study1}
+
+The first study exploits the unusually rich data trail generated by the research portfolio that produced the evidence in this paper. Because all writing was conducted through an AI assistant with version-controlled outputs, the complete history of collaborative development is preserved in git repositories.
+
+\textbf{Data.} Git history from five papers spanning five disciplines, including all diffs between local (AI-assisted) revisions and remote (post-review) corrections. Each diff represents a transition from the Deep session's output to a corrected state informed by Fresh-session or external review.
+
+\textbf{Measures.} Three primary dependent variables will be extracted from the git diffs:
+\begin{itemize}
+    \item \textbf{Citation directionality:} Each citation added or removed during revision will be classified as thesis-confirming, thesis-challenging, or neutral by two independent raters. The ratio of confirming to challenging citations in AI-assisted drafts versus post-review corrections is the primary measure of directional bias.
+    \item \textbf{Interpretation framing:} Each interpretive claim modified during revision will be classified as thesis-rescuing (reinterpreting ambiguous evidence to support $T$) or thesis-questioning (acknowledging that evidence is ambiguous or contrary). The proportion of thesis-rescuing interpretations in AI-assisted drafts versus post-review corrections indexes the degree of interpretive entrenchment.
+    \item \textbf{Metadata accuracy:} Every AI-suggested citation will be verified against DOI or archival records. The rate and directionality of metadata errors (author attribution, publication details) will be computed and compared to a baseline rate for human-only citation practices drawn from published retraction and errata data.
+\end{itemize}
+
+\textbf{Analysis.} The primary comparison is between Deep-session outputs and Fresh-session corrections across all five papers. If collaborative entrenchment is operating, we predict: (a)~a significantly higher ratio of confirming-to-challenging citations in Deep-session drafts than in corrected versions; (b)~a higher proportion of thesis-rescuing interpretations in Deep-session drafts; and (c)~a non-trivial metadata error rate concentrated in AI-suggested (rather than researcher-supplied) citations.
+
+\textbf{Limitations of Study~1.} This is an $N{=}1$ case study with a single researcher, a single AI system, and a non-random selection of papers. It cannot distinguish collaborative entrenchment from the researcher's individual confirmation bias operating independently of the AI. Its value is as a detailed existence proof and as the basis for effect-size estimation to power Study~2.
+
+\subsection{Study 2: Controlled Experiment (Future Work)}
+\label{sec:study2}
+
+The second study is designed to isolate the contribution of collaborative entrenchment from the separate contributions of human confirmation bias and AI sycophancy.
+
+\textbf{Design.} A $2 \times 2$ between-subjects factorial design crossing two factors:
+\begin{itemize}
+    \item \textbf{Writing condition:} AI-assisted (continuous interaction with an LLM during writing) versus Solo (no AI assistance; standard literature databases only).
+    \item \textbf{Review condition:} Fresh review (paper submitted to a zero-context AI review session before finalization) versus No review (paper finalized without context-free review).
+\end{itemize}
+
+This yields four cells: (1)~AI-assisted with Fresh review, (2)~AI-assisted without Fresh review, (3)~Solo with Fresh review, and (4)~Solo without Fresh review.
+
+\textbf{Participants.} Graduate students or early-career researchers ($N \geq 60$, minimum 15 per cell) recruited from multiple disciplines to ensure variability in domain knowledge and research style.
+
+\textbf{Task.} Each participant writes a short position paper (2,000--3,000 words) on a provided topic, with access to a curated but complete literature set that includes both confirming and disconfirming sources. The topic and literature set are designed so that a balanced reading supports a nuanced conclusion, while a biased reading supports a strong directional claim.
+
+\textbf{Dependent variables:}
+\begin{itemize}
+    \item \textbf{Citation directionality ratio:} The proportion of cited sources that confirm the paper's thesis versus those that challenge or qualify it.
+    \item \textbf{Counter-argument density:} The number of counter-arguments or qualifications per 1,000 words, scored by blinded raters.
+    \item \textbf{Blind reviewer ratings:} Independent reviewers (blinded to condition) rate each paper on argumentative balance, evidentiary rigor, and overall scholarly quality using a standardized rubric.
+    \item \textbf{Metadata accuracy:} For the AI-assisted conditions, the rate and directionality of citation metadata errors.
+\end{itemize}
+
+\textbf{Predictions.} If collaborative entrenchment is an emergent property of the human--AI interaction loop (rather than a simple sum of confirmation bias and sycophancy), the following pattern should emerge:
+\begin{itemize}
+    \item Cell~2 (AI-assisted, no Fresh review) will show the highest citation directionality ratio and lowest counter-argument density---higher than Cell~4 (Solo, no review), which reflects confirmation bias alone without AI amplification.
+    \item The interaction effect (AI $\times$ no review) will be significant and super-additive: the AI-assisted bias will exceed the sum of the Solo bias main effect and the AI sycophancy main effect.
+    \item Cell~1 (AI-assisted, Fresh review) will show citation directionality and counter-argument density comparable to or better than Cell~3 (Solo, Fresh review), demonstrating that the Fresh-review intervention effectively breaks the loop.
+\end{itemize}
+
+The critical test is the interaction effect. If collaborative entrenchment is merely additive (confirmation bias + sycophancy, no more), the interaction term will be non-significant. If it is emergent (a compounding loop producing more bias than either component alone), the interaction term will be significant and positive. This is the test that distinguishes the Narcissus Loop from the simpler explanation that a biased human plus a sycophantic tool yields biased output.
+
+%----------------------------------------------------------------------
+\section{Implications}
+\label{sec:implications}
+
+\subsection{For AI-Assisted Research}
+
+The most immediate practical implication is that \textbf{every AI-assisted research paper should undergo at least one context-free review pass before submission}. The evidence in Section~\ref{sec:three-session} demonstrates that a single Fresh-session review detected six problems that hours of Deep-session collaboration missed. This is not a high-cost intervention: spawning a new AI session with only the manuscript file requires minutes, not hours. The asymmetry between cost (minimal) and benefit (detection of systematically missed problems) makes context-free review a strong candidate for adoption as standard practice in AI-assisted research workflows.
+
+Beyond session-level review, the directional citation bias findings (Section~\ref{sec:directional-bias}) suggest the value of \textbf{automated git-diff bias auditing}. A tool that classifies each citation added during AI-assisted revision as thesis-confirming, thesis-challenging, or neutral could provide researchers with a running measure of directional asymmetry. A ratio as extreme as 5:0 should trigger a deliberate search for counter-evidence, regardless of the researcher's subjective confidence in the argument. The git-diff approach is feasible because AI-assisted writing workflows already generate version-controlled histories; the audit requires classification of existing data, not new data collection.
+
+The metadata hallucination pattern (Sections~\ref{sec:hallucinated-citations} and~\ref{sec:reference-audit}) points to a third practical measure: \textbf{systematic verification of AI-suggested citation metadata against DOI or archival records}. The finding that 9 of 11 flagged references in a single paper contained author-attribution errors, while the cited papers themselves existed and supported the cited claims, means that standard scholarly verification (``does this paper say what I claim it says?'') is insufficient. Verification must extend to metadata: ``is this paper \emph{by whom I claim it is by}?'' Until AI systems reliably retrieve rather than generate citation metadata, this verification step should be treated as mandatory for any AI-assisted manuscript.
+
+\subsection{For AI System Design}
+
+The Narcissus Loop analysis identifies several design interventions that could reduce collaborative entrenchment at the system level.
+
+\textbf{Context windowing.} If context accumulation is the mechanism through which the loop compounds, periodic context resets---either automatic or user-initiated---could interrupt the compounding trajectory. A system that periodically summarizes and resets its context, rather than carrying the full conversation history indefinitely, would reduce the proportion of $T$-aligned material in the working context. The trade-off is loss of nuanced project understanding; the optimal reset interval is an empirical question that likely depends on task type, domain complexity, and the researcher's stage in the writing process.
+
+\textbf{Adversarial prompting.} A built-in devil's advocate mode---in which the AI is periodically instructed to argue against the current framing---could counteract the sycophantic pressure that contributes to the loop. This is distinct from a Fresh session (which has no context) because the adversarial prompt operates within the accumulated context but against its direction. Preliminary observations from the Ploidy protocol suggest that adversarial prompting within an accumulated context is less effective than Fresh-session review, possibly because the accumulated $T$-aligned material biases even the adversarial outputs; however, systematic comparison remains needed.
+
+\textbf{Citation provenance tracking.} AI systems that distinguish between retrieved and generated citation metadata---flagging author names, publication details, and other metadata as either verified against a database or generated by the model---would allow researchers to focus verification effort on the highest-risk citations. This is a tractable engineering problem: integration with existing bibliographic databases (CrossRef, Semantic Scholar, Google Scholar) could enable real-time verification at the point of citation suggestion, with unverified metadata clearly marked as such.
+
+\subsection{For the Ploidy Research Program}
+
+The Narcissus findings provide a concrete, empirically documented application domain for context-asymmetric debate. The Ploidy protocol was developed as a general-purpose methodology for mitigating context-dependent bias in LLM interactions; academic writing turns out to be a domain where the bias is particularly measurable and the stakes are particularly high.
+
+Three specific connections warrant emphasis. First, the three-session natural experiment (Section~\ref{sec:three-session}) provides an existence proof that context-asymmetric review catches problems that symmetric review (same-context) misses. This is the foundational claim of the Ploidy approach: disagreement between sessions with different context depths is a diagnostic signal, not noise. Second, the complementarity of the two context-free sessions---Fresh Agents and Separate Session catching different problems---suggests that a single context-free review may be insufficient. The Ploidy framework supports multi-agent review with diverse role assignments, and the evidence here motivates exploring how many and what types of context-free reviewers are needed for adequate coverage. Third, the finding that the researcher who designed Ploidy still fell victim to collaborative entrenchment underscores the core Ploidy thesis: correction must be architectural, not epistemic. Awareness of bias is not a substitute for structural bias mitigation.
+
+%----------------------------------------------------------------------
+\section{Related Work}
+\label{sec:related}
+
+\textbf{AI sycophancy.} The tendency of language models to agree with users has been documented across multiple architectures and training regimes. \citet{perez2022} developed model-written evaluation suites that systematically probe sycophantic behavior, finding that models trained with RLHF exhibit higher rates of agreement with user-stated positions. \citet{sharma2023} provided a detailed analysis of sycophancy mechanisms, distinguishing between prompt-level agreement (responding to explicit user opinions) and context-level alignment (adjusting outputs to match accumulated conversational tone). The Narcissus Loop extends this work by situating sycophancy within a multi-turn, multi-session feedback cycle where the compounding of context-level alignment produces emergent bias beyond per-turn agreement.
+
+\textbf{Confirmation bias in scientific reasoning.} \citet{nickerson1998} provides the canonical review of confirmation bias across domains, documenting its presence in hypothesis testing, evidence evaluation, and information search. \citet{mynatt1977} demonstrated confirmation bias in simulated research environments, showing that participants preferentially sought evidence confirming their initial hypotheses even when disconfirming evidence was available and more diagnostic. The Narcissus Loop adds a new dimension to this literature: an external agent (the AI) that amplifies the search radius for confirming evidence while maintaining the directional bias, effectively expanding the supply of confirmatory material available to an already-biased researcher.
+
+\textbf{AI-assisted writing.} \citet{lee2022} introduced the CoAuthor framework for studying human--AI collaborative writing, documenting how AI suggestions shape the trajectory of written documents over time. \citet{gero2023} examined the social dynamics of AI support in creative writing, finding that writers' relationships with AI assistants develop in ways that influence output quality and direction. The present work extends these findings to academic writing specifically, where the stakes of directional bias---corrupted citation records, unfounded scholarly claims, invisible exclusion of counter-evidence---differ qualitatively from those in creative or general-purpose writing contexts.
+
+\textbf{Context effects in LLMs.} \citet{liu2024} documented the ``lost in the middle'' phenomenon, showing that language models disproportionately attend to information at the beginning and end of long contexts, underweighting material in the middle. \citet{shi2023} demonstrated that LLMs can be easily distracted by irrelevant context, with performance degrading as irrelevant material accumulates in the prompt. These findings are relevant to the Narcissus Loop because they suggest that context accumulation does not merely add information---it changes the model's attention distribution and generation probabilities in ways that are sensitive to the content's position and relevance. In a collaborative entrenchment scenario, $T$-aligned material accumulates throughout the context and occupies both the high-attention positions (recent turns) and the bulk of the context, doubly biasing generation toward $T$-confirmation.
+
+\textbf{Reproducibility and research integrity.} \citet{ioannidis2005} argued that most published research findings are false, driven by flexibility in study design, data analysis, and selective reporting. The \citet{osc2015} large-scale replication effort confirmed that a substantial fraction of published effects in psychology do not replicate. The Narcissus Loop introduces a new category of threat to research integrity that is specific to AI-assisted workflows: not intentional $p$-hacking or researcher degrees of freedom, but \emph{structural} bias introduced by the feedback loop between researcher framing and AI context accumulation. Unlike traditional threats to reproducibility, collaborative entrenchment may leave no visible trace in the final manuscript---the biased search process is not reported, the missing counter-evidence is not listed, and the hallucinated metadata looks correct to any reader who does not independently verify each reference.
+
+%----------------------------------------------------------------------
+\section{Limitations}
+\label{sec:limitations}
+
+Several limitations constrain the scope and generalizability of the present findings.
+
+\begin{itemize}
+    \item \textbf{N=1 case study.} All evidence derives from a single research program conducted by a single researcher using a single AI system (Claude Opus 4.6). Individual differences in research style, domain expertise, and AI interaction patterns may moderate or eliminate the observed effects. The proposed Study~2 (Section~\ref{sec:study2}) is designed to address this limitation through a multi-participant controlled experiment.
+
+    \item \textbf{Self-referential methodology.} This paper about AI-induced bias in research was itself written with AI assistance. The collaborative entrenchment mechanism it describes may have operated during its own composition, biasing the selection and interpretation of evidence toward confirming the Narcissus Loop hypothesis. We have attempted to mitigate this through Fresh-session review of the manuscript, but the recursive nature of the problem means that mitigation cannot be fully verified from within the system.
+
+    \item \textbf{Fresh sessions are not unbiased.} Context-free sessions eliminate accumulated $T$-alignment but retain the base model's training biases, including any systematic tendencies in how the model evaluates academic arguments. Fresh sessions are better characterized as \emph{differently biased} than as unbiased. Their value lies in the asymmetry---they lack the specific bias introduced by context accumulation---not in the absence of all bias.
+
+    \item \textbf{Uncontrolled comparison.} The three-session comparison was not a controlled experiment. The sessions differed not only in context depth but also in prompt wording, timing, assigned role (collaborator vs.\ adversarial reviewer vs.\ independent reviewer), and the specific papers reviewed. These confounds mean that the observed differences cannot be unambiguously attributed to context depth alone. The factorial design of Study~2 is intended to isolate the relevant factors.
+
+    \item \textbf{Citation directionality as a proxy.} We use the ratio of thesis-confirming to thesis-challenging citations as a primary measure of collaborative entrenchment. This is a proxy, not a direct measure of the underlying cognitive or computational process. A high directionality ratio could reflect legitimate argumentative strategy (the thesis is well-supported and counter-evidence is genuinely weak) rather than bias (counter-evidence was systematically excluded). The strength of the measure comes from the \emph{comparison} between Deep and Fresh conditions rather than from the absolute ratio in either condition.
+
+    \item \textbf{Model specificity.} All observations were made with a single model family (Claude). Other LLMs may exhibit different sycophancy profiles, different hallucination patterns, and different context-sensitivity characteristics. The generalizability of the Narcissus Loop across AI systems is an open empirical question that future work should address.
+\end{itemize}
+
+%----------------------------------------------------------------------
+\bibliographystyle{plainnat}
+\begin{thebibliography}{99}
+
+\bibitem[Nickerson(1998)]{nickerson1998}
+Nickerson, R.~S. (1998).
+\newblock Confirmation bias: A ubiquitous phenomenon in many guises.
+\newblock \emph{Review of General Psychology}, 2(2), 175--220.
+
+\bibitem[Perez et~al.(2022)]{perez2022}
+Perez, E., Ringer, S., Luko\v{s}i\={u}t\.{e}, K., et~al. (2022).
+\newblock Discovering language model behaviors with model-written evaluations.
+\newblock \emph{arXiv preprint arXiv:2212.09251}.
+
+\bibitem[Sharma et~al.(2023)]{sharma2023}
+Sharma, M., Tong, M., Korbak, T., et~al. (2023).
+\newblock Towards understanding sycophancy in language models.
+\newblock \emph{arXiv preprint arXiv:2310.13548}.
+
+\bibitem[Mynatt et~al.(1977)]{mynatt1977}
+Mynatt, C.~R., Doherty, M.~E., \& Tweney, R.~D. (1977).
+\newblock Confirmation bias in a simulated research environment.
+\newblock \emph{Quarterly Journal of Experimental Psychology}, 29(1), 85--95.
+
+\bibitem[Lee et~al.(2022)]{lee2022}
+Lee, M., Liang, P., \& Yang, Q. (2022).
+\newblock CoAuthor: Designing a human-AI collaborative writing dataset.
+\newblock \emph{Proceedings of CHI 2022}.
+
+\bibitem[Gero et~al.(2023)]{gero2023}
+Gero, K.~I., Long, T., \& Chilton, L.~B. (2023).
+\newblock Social dynamics of AI support in creative writing.
+\newblock \emph{Proceedings of CHI 2023}.
+
+\bibitem[Liu et~al.(2024)]{liu2024}
+Liu, N.~F., Lin, K., Hewitt, J., et~al. (2024).
+\newblock Lost in the middle: How language models use long contexts.
+\newblock \emph{TACL}, 12, 157--173.
+
+\bibitem[Shi et~al.(2023)]{shi2023}
+Shi, F., Chen, X., Misra, K., et~al. (2023).
+\newblock Large language models can be easily distracted by irrelevant context.
+\newblock \emph{Proceedings of ICML 2023}.
+
+\bibitem[Ioannidis(2005)]{ioannidis2005}
+Ioannidis, J.~P.~A. (2005).
+\newblock Why most published research findings are false.
+\newblock \emph{PLoS Medicine}, 2(8), e124.
+
+\bibitem[{Open Science Collaboration}(2015)]{osc2015}
+{Open Science Collaboration}. (2015).
+\newblock Estimating the reproducibility of psychological science.
+\newblock \emph{Science}, 349(6251), aac4716.
+
+\end{thebibliography}
+
+\end{document}
