@@ -10,14 +10,20 @@ When researchers use AI assistants for real-time literature search and writing, 
 - **Directional hallucination**: AI fabricates metadata for thesis-supporting papers, never for counter-arguments
 - **Fresh sessions** (zero context) catch critical problems that Deep sessions (accumulated context) systematically miss
 
-## Structure
+## Repository Structure
 
-- `outline.md` — Paper outline and proposed study design
-- `citation-directionality-analysis.md` — Quantitative audit of citation bias across repositories
-
-## Venue Candidates
-
-CHI 2027 · FAccT 2027 · CSCW 2027
+```
+narcissus/
+  paper/                      Domain -- manuscript source of truth
+    main.tex
+    figures/
+  experiments/                Application -- evidence generation
+    results/
+      citation-directionality-analysis.md   Quantitative audit across 5 repos
+  literature/                 Reading notes, gap analysis
+  planning/                   TODO, review, decisions log
+    drafts/                   outline.md (superseded)
+```
 
 ## Related
 
