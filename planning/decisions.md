@@ -52,3 +52,21 @@ User accepted the recommended option for all eight major items.
 All eight fixes are documented in-paper at the corresponding §; bibliography expanded with Kerr 1998, Wei 2024, Lakens 2017, Faul 2007.
 
 **Minor (TODO comments only, not blocking)**: m1 biblatex/.bib migration; m2 OSF/AsPredicted preregistration; m3 hallucination 4-type typology (placeholder/wrong-author/anonymous/URL); m4 time-decay curve T0–T3; m5 dead `python src/<script>.py` reference in experiments/README.md.
+
+---
+
+## 2026-05-21 -- Model versioning: Opus 4.7 release handling
+
+**Context**: Claude Opus 4.7 released 2026-Q2, after the 2026-03-26 audit was complete with Opus 4.6. Risk: paper looks dated by the time it lands at CHI/FAccT 2027. Reviewer push-back almost certain on "but newer models..."
+
+**Decision**: Preserve the 4.6-frozen natural experiment as the historical record; add a within-Claude-family model-version replication arm to Study 1 and a model-version covariate to Study 2.
+
+- §2 (Evidence) — Opus 4.6 retained as accurate description of the natural experiment, with a new paragraph noting 4.7 was released after the audit and that model-version generalization is treated as an empirical question in Studies 1 and 2.
+- §4.1 (Study 1) — Added a "Model-version replication arm": the same five papers re-reviewed by Fresh sessions under Opus 4.7. Reports 4.6↔4.7 κ alongside the two-rater human κ.
+- §4.2 (Study 2) — Added a model-version covariate: AI-assisted cells (1 and 2) split 16/16 between Opus 4.6 and Opus 4.7. Tests the three-way AI × Review × Version interaction for model-version stability of the effect.
+- §6 (Limitations) — "Model specificity" entry updated: within-Claude-family stability is now in Studies 1 and 2; cross-vendor generalization (GPT, Gemini, open-weights) explicitly punted to TODO #2 as a separate study.
+- planning/TODO.md #2 — Reframed from "3-model comparison" to cross-vendor focus (within-Claude-version comparison absorbed by Study 1 replication arm).
+
+**Why**: The natural experiment's data are frozen in time and cannot be retroactively updated to 4.7; rewriting §2 would falsify the historical record. The right move is to (a) keep §2 accurate, (b) explicitly acknowledge the version gap in §6, and (c) build version replication into the prospective studies. This converts a known limitation into a planned empirical contribution.
+
+**Cost**: Study 1 doubles in size (each paper reviewed twice — under 4.6 and 4.7). Study 2 AI-assisted cells require 32 participants each, distributed 16/16 across versions; the total N=128 design remains valid.
