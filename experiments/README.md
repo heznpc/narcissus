@@ -23,6 +23,15 @@ experiments/
 
 ## Reproducing
 
-```bash
-python src/<script>.py
-```
+<!-- TODO(review-2026-05-21, m5): src/ currently holds only .gitkeep. The
+citation audit (results/citation-directionality-analysis.md) was performed by
+manual classification, not by a runnable script. Either (a) populate src/
+with the Study 1 two-rater classification + DOI verification pipeline, or
+(b) rewrite this section to make clear that the audit artifact is the canonical
+output and no runnable script exists yet. The Study 1 two-rater pipeline is
+the planned implementation. -->
+
+The 2026-03-26 audit was performed by manual classification; no runnable
+script is currently shipped. The Study 1 two-rater classification pipeline
+(planned) will populate `src/` and use the schema fixed in
+`data/raw/audit-manifest-2026-05-21.md`.
