@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.heznpc.narcissus-multirun-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/ren/IdeaProjects/Paper/narcissus/experiments/src/multirun_watchdog.sh</string>
+    </array>
+
+    <!-- Run every 60 seconds. macOS LaunchAgents drift but that's fine
+         for this purpose; the only invariant is "at most one multirun
+         master running at a time", enforced by the watchdog's pgrep+lock. -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <!-- Run immediately on agent load (e.g. login or bootstrap). -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/ren/IdeaProjects/Paper/narcissus/experiments/state/watchdog.out</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/ren/IdeaProjects/Paper/narcissus/experiments/state/watchdog.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/ren</string>
+    </dict>
+
+    <!-- Allow the watchdog to keep running through laptop sleep / login
+         sessions. The multirun script it launches will inherit user-level
+         shell environment via PATH above. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
