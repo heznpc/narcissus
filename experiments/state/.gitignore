@@ -1,0 +1,5 @@
+# Checkpoint state is per-run / per-machine; do not commit.
+*.json
+*.json.tmp
+*.json.corrupt
+!.gitignore

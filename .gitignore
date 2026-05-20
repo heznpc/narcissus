@@ -54,3 +54,9 @@ paper/main.pdf
 # Distribution
 *.tar.gz
 *.zip
+
+# Experiment raw outputs (LLM responses are large + per-run; Zenodo archive
+# is the canonical reproducibility surface, not git).
+experiments/data/raw/study1-replication/
+experiments/data/raw/study2-*/
+
