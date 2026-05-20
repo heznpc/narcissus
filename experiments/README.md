@@ -23,15 +23,52 @@ experiments/
 
 ## Reproducing
 
-<!-- TODO(review-2026-05-21, m5): src/ currently holds only .gitkeep. The
-citation audit (results/citation-directionality-analysis.md) was performed by
-manual classification, not by a runnable script. Either (a) populate src/
-with the Study 1 two-rater classification + DOI verification pipeline, or
-(b) rewrite this section to make clear that the audit artifact is the canonical
-output and no runnable script exists yet. The Study 1 two-rater pipeline is
-the planned implementation. -->
+The 2026-03-26 audit was performed by manual classification. The Study 1
+**model-version replication arm** (see paper §4.1) is implemented as a
+resumable runner under `src/`:
 
-The 2026-03-26 audit was performed by manual classification; no runnable
-script is currently shipped. The Study 1 two-rater classification pipeline
-(planned) will populate `src/` and use the schema fixed in
-`data/raw/audit-manifest-2026-05-21.md`.
+```bash
+# Smoke test (no API key needed, no quota consumed):
+python src/run_study1_replication.py --dry-run
+
+# Real run (requires ANTHROPIC_API_KEY):
+python src/run_study1_replication.py
+```
+
+### Resilience
+
+- Idempotent: re-running the same command skips any `(paper, model)` cell
+  already recorded in `state/study1-checkpoint.json`.
+- **5h quota boundary aware**: anchored at 2026-05-21 03:10 KST. On HTTP
+  429/529 or any error body containing `rate_limit` / `overloaded` /
+  `quota` / `usage_limit`, the runner sleeps until the next 5h boundary
+  (+15s jitter) and retries automatically, up to `--max-resets` cycles
+  (default 6 = ~30h).
+- Atomic writes: each cell's output is written to `*.tmp` then
+  `os.replace`d; the checkpoint is rewritten the same way.
+- On `--max-resets` exceeded the runner exits with code 2 and the
+  checkpoint preserves all completed cells — just re-run to resume.
+
+### Validation
+
+```bash
+python src/test_reset_window.py
+```
+
+asserts the 5h boundary math (anchor in KST, before/at/after-anchor
+behavior, jitter). Run after any change to `reset_window.py`.
+
+### File map
+
+| Path | Purpose |
+|---|---|
+| `src/reset_window.py` | 5h reset boundary calculator (UTC-internal, KST-anchored). |
+| `src/api_client.py` | Anthropic call wrapper with quota-aware sleep+retry. |
+| `src/checkpoint.py` | Atomic JSON checkpoint store. |
+| `src/fresh_review.py` | One Fresh-session adversarial review (model-agnostic; dry-run safe). |
+| `src/run_study1_replication.py` | Main runner: (paper, model) grid + checkpoint loop. |
+| `src/test_reset_window.py` | Boundary math smoke tests. |
+| `state/` | Per-run checkpoints (gitignored). |
+| `data/raw/audit-manifest-2026-05-21.md` | Pinned SHAs of the 5 audited source repos. |
+| `data/raw/hallucination-verification-2026-05-21.csv` | External DOI verification of the 4 §2.2 Table 4 claims. |
+| `results/hallucination-verification-2026-05-21.md` | Per-citation verification report. |
