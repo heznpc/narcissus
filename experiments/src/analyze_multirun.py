@@ -207,6 +207,120 @@ def stability_bucket(freq: int, n_runs: int) -> str:
     return "rare"
 
 
+def fleiss_kappa(paper_id: str, runs_data: list[tuple[int, dict]]) -> dict:
+    """Fleiss' kappa across n runs treated as raters, each binary-rating
+    whether each unioned section is flagged.
+
+    For binary categories with N raters and n items:
+      P_i  = proportion-of-agreement for item i across raters
+      P_bar = mean of P_i over items
+      Pe_bar = sum_j p_j^2 where p_j is overall proportion in category j
+      kappa = (P_bar - Pe_bar) / (1 - Pe_bar)
+
+    Returns dict with kappa, n_items, n_raters, and per-paper diagnostics.
+    """
+    # Item universe: union of all normalized sections across runs.
+    universe: set[str] = set()
+    flag_matrix: list[dict[int, bool]] = []  # row per item, col per run
+    runs = sorted(runs_data, key=lambda x: x[0])
+    n_raters = len(runs)
+    if n_raters < 2:
+        return {"kappa": float("nan"), "n_items": 0, "n_raters": n_raters,
+                "reason": "need >= 2 raters"}
+    # First pass: gather union of sections.
+    run_sections: dict[int, set[str]] = {}
+    for r, d in runs:
+        secs: set[str] = set()
+        for issue in d["response"]["issues"]:
+            for s in normalize_section(issue.get("section", ""), paper_id=paper_id):
+                secs.add(s)
+        run_sections[r] = secs
+        universe |= secs
+    universe_list = sorted(universe)
+    n_items = len(universe_list)
+    if n_items == 0:
+        return {"kappa": float("nan"), "n_items": 0, "n_raters": n_raters,
+                "reason": "no flagged sections"}
+
+    # Per-item agreement.
+    p_i: list[float] = []
+    cat_totals = {"flag": 0, "noflag": 0}
+    for sec in universe_list:
+        n_flag = sum(1 for r, _ in runs if sec in run_sections[r])
+        n_noflag = n_raters - n_flag
+        # P_i for binary: [n_flag*(n_flag-1) + n_noflag*(n_noflag-1)] / [N*(N-1)]
+        agree = (n_flag * (n_flag - 1) + n_noflag * (n_noflag - 1)) / (
+            n_raters * (n_raters - 1)
+        )
+        p_i.append(agree)
+        cat_totals["flag"] += n_flag
+        cat_totals["noflag"] += n_noflag
+
+    p_bar = sum(p_i) / n_items
+    total = cat_totals["flag"] + cat_totals["noflag"]
+    p_flag = cat_totals["flag"] / total
+    p_noflag = cat_totals["noflag"] / total
+    pe_bar = p_flag * p_flag + p_noflag * p_noflag
+    if abs(1 - pe_bar) < 1e-9:
+        kappa = float("nan")
+    else:
+        kappa = (p_bar - pe_bar) / (1 - pe_bar)
+    return {
+        "kappa": kappa,
+        "n_items": n_items,
+        "n_raters": n_raters,
+        "p_bar": p_bar,
+        "pe_bar": pe_bar,
+        "p_flag_overall": p_flag,
+        "n_stable_5of5": sum(1 for sec in universe_list
+                              if sum(1 for r, _ in runs if sec in run_sections[r]) == n_raters),
+    }
+
+
+# ---- Per-cell metrics (timing + size) --------------------------------------
+
+def cell_metrics(paper: str) -> list[dict]:
+    """Per-cell timing + size proxies (no token counts — claude --print used
+    plain text mode; future runs will use --output-format json for exact)."""
+    paper_paths = {
+        "narcissus":               "/Users/ren/IdeaProjects/Paper/narcissus/paper/main.tex",
+        "analogic-appropriation":  "/Users/ren/IdeaProjects/Paper/analogic-appropriation/paper/main.tex",
+        "z-gap":                   "/Users/ren/IdeaProjects/Paper/z-gap/paper/main.tex",
+        "eddy":                    "/Users/ren/IdeaProjects/Paper/eddy/paper/main.tex",
+        "ploidy":                  "/Users/ren/IdeaProjects/Paper/ploidy/paper/main.tex",
+    }
+    rows = []
+    src = Path(paper_paths.get(paper, ""))
+    manuscript_chars = src.stat().st_size if src.exists() else 0
+    manuscript_lines = len(src.read_text(encoding="utf-8", errors="ignore").splitlines()) if src.exists() else 0
+    for r in RUNS:
+        d = load_run(paper, r)
+        if d is None:
+            continue
+        cell_file = OUT_DIR / f"{paper}__claude-opus-4-7__bare__run-{r}.json"
+        out_chars = cell_file.stat().st_size
+        # Approximate response chars from issues + summary.
+        resp = d["response"]
+        response_chars = (
+            len(resp.get("summary", ""))
+            + sum(len(i.get("description", "")) + len(i.get("counter_evidence") or "")
+                  for i in resp["issues"])
+        )
+        # run_at_utc from cell JSON; mtime from filesystem.
+        rows.append({
+            "paper": paper,
+            "run": r,
+            "manuscript_chars": manuscript_chars,
+            "manuscript_lines": manuscript_lines,
+            "response_chars": response_chars,
+            "issue_count": len(resp["issues"]),
+            "run_at_utc": d.get("run_at_utc", ""),
+            "approx_input_tokens": manuscript_chars // 4,  # rough 4 chars/token
+            "approx_output_tokens": response_chars // 4,
+        })
+    return rows
+
+
 # ---- Report ----------------------------------------------------------------
 
 def main() -> None:
@@ -274,6 +388,53 @@ def main() -> None:
     print(f"  Mean issues per cell:    {statistics.mean(all_counts):.2f}")
     print(f"  Total issues (25 cells): {sum(all_counts)}")
     print("=" * 72)
+    print()
+
+    # ---- Fleiss' kappa per paper -------------------------------------------
+    print("Fleiss' kappa across 5 runs as raters (binary: section flagged?):")
+    print(f"  {'paper':<25} {'n_items':>8} {'kappa':>8} {'P_bar':>8} {'Pe_bar':>8}")
+    kappas = []
+    for p in PAPERS:
+        runs = [(r, load_run(p, r)) for r in RUNS]
+        runs = [(r, d) for r, d in runs if d is not None]
+        fk = fleiss_kappa(p, runs)
+        kappas.append(fk["kappa"])
+        if fk["kappa"] == fk["kappa"]:  # not nan
+            print(f"  {p:<25} {fk['n_items']:>8} {fk['kappa']:>8.3f} "
+                  f"{fk['p_bar']:>8.3f} {fk['pe_bar']:>8.3f}")
+        else:
+            print(f"  {p:<25} (kappa undefined: {fk.get('reason','')})")
+    valid_kappas = [k for k in kappas if k == k]
+    if valid_kappas:
+        print(f"  {'mean across papers':<25} {'':>8} {statistics.mean(valid_kappas):>8.3f}")
+    print()
+
+    # ---- Per-cell metrics --------------------------------------------------
+    import csv
+    metrics_out = Path("experiments/data/raw/study1-replication/multirun-metrics.csv")
+    rows = [m for p in PAPERS for m in cell_metrics(p)]
+    metrics_out.parent.mkdir(parents=True, exist_ok=True)
+    with metrics_out.open("w", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        for row in rows:
+            w.writerow(row)
+    print(f"Per-cell metrics → {metrics_out} ({len(rows)} rows)")
+    print()
+    print("Per-paper rough size summary (manuscript_chars / mean response_chars):")
+    by_paper = defaultdict(list)
+    for r in rows:
+        by_paper[r["paper"]].append(r)
+    for p, rs in by_paper.items():
+        mc = rs[0]["manuscript_chars"]
+        mlines = rs[0]["manuscript_lines"]
+        rc_mean = statistics.mean(r["response_chars"] for r in rs)
+        rc_sd = statistics.stdev(r["response_chars"] for r in rs) if len(rs) > 1 else 0
+        in_tok = mc // 4
+        out_tok = int(rc_mean // 4)
+        print(f"  {p:<25} manuscript {mc:>6} chars / {mlines:>4} lines "
+              f"(~{in_tok:>5} in_tok)   response mean {rc_mean:>6.0f} ± "
+              f"{rc_sd:>5.0f} chars (~{out_tok:>4} out_tok)")
 
 
 if __name__ == "__main__":

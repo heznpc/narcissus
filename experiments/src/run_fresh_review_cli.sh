@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
 # One Fresh-session adversarial review via `claude --print` (Max-OAuth-auth).
-# Usage: run_fresh_review_cli.sh <paper_id> <paper_path> <out_dir> <run_id>
+# Usage: run_fresh_review_cli.sh <paper_id> <paper_path> <out_dir> <run_id> [model]
 #
-# Fresh-context isolation strategy (since --bare disables Max auth):
-#   1. Run `claude` from a clean tmp directory (no CLAUDE.md auto-discovery
-#      via cwd or parent walk) so no project context is auto-loaded.
+# `model` defaults to claude-opus-4-7. The model is passed explicitly via
+# `--model`; otherwise Claude Code defaults to claude-opus-4-6 (1M context)
+# — a silent default that previously caused the entire May 2026 multirun
+# to be mislabeled.
+#
+# Fresh-context isolation:
+#   1. Run `claude` from a mktemp'd tmp directory (no CLAUDE.md auto-discovery
+#      via cwd or parent walk).
 #   2. --disable-slash-commands prevents accidental skill execution.
 #   3. The prompt + manuscript are piped via stdin (no argv length risk).
-# Global ~/.claude/CLAUDE.md (if it existed) would still load; on this
-# machine it does not, so the only ambient context is the user's
-# ~/.claude/settings.json defaults (no paper content).
 #
-# Output: <out_dir>/<paper_id>__claude-opus-4-7__bare__run-<run_id>.json
-# (we keep the __bare__ tag in the filename for consistency with the
-# multirun harness; the file is produced by Max-OAuth-claude with
-# project-context isolation, not by --bare proper.)
+# Envelope capture:
+#   --output-format json wraps the model response in a JSON envelope that
+#   includes duration_ms, duration_api_ms, total_cost_usd, and detailed
+#   usage stats (input_tokens, output_tokens, cache_creation_input_tokens,
+#   cache_read_input_tokens, modelUsage per actual model). All of these
+#   are recorded inside the output cell JSON under "envelope" so model
+#   identity is provable and per-cell cost/time is measured, not estimated.
+#
+# Output: <out_dir>/<paper_id>__<model>__bare__run-<run_id>.json
 
-set -euo pipefail
+set -uo pipefail
 
 paper_id="${1:?paper_id required}"
 paper_path="${2:?paper_path required}"
 out_dir="${3:?out_dir required}"
 run_id="${4:?run_id required}"
+model="${5:-claude-opus-4-7}"
 
-out_path="${out_dir}/${paper_id}__claude-opus-4-7__bare__run-${run_id}.json"
+# Filename uses the exact requested model. Verification of actual model
+# served happens via the envelope's modelUsage key (recorded in the cell).
+safe_model="${model//\//_}"
+out_path="${out_dir}/${paper_id}__${safe_model}__bare__run-${run_id}.json"
 
 if [ -f "$out_path" ]; then
   echo "skip (exists): $out_path"
@@ -35,11 +46,9 @@ if [ ! -f "$paper_path" ]; then
 fi
 mkdir -p "$out_dir"
 
-# Work dir with no CLAUDE.md — isolated from this project tree.
 work_dir="$(mktemp -d -t narcissus-fresh-XXXXXX)"
 trap 'rm -rf "$work_dir"' EXIT
 
-# Compose prompt with manuscript inline. Sent via stdin to bypass argv limits.
 prompt_file="${work_dir}/prompt.txt"
 {
   cat <<PROMPT_HEADER
@@ -59,11 +68,7 @@ this exact schema:
 
 {
   "paper_id": "${paper_id}",
-  "model": "claude-opus-4-7",
   "run_at_utc": "<current ISO-8601 UTC timestamp>",
-  "dry_run": false,
-  "invocation": "claude-cli-bare",
-  "run_id": ${run_id},
   "response": {
     "issues": [
       {"section": "<ref>", "severity": "critical|major|minor",
@@ -75,75 +80,116 @@ this exact schema:
 }
 
 paper_id MUST be the literal string "${paper_id}".
-model MUST be the literal string "claude-opus-4-7".
-invocation MUST be the literal string "claude-cli-bare".
-run_id MUST be the integer ${run_id}.
+The schema fields for model / invocation / run_id are injected by the
+wrapping script — DO NOT include them.
 
 MANUSCRIPT:
 ---
+$(cat "$paper_path")
+---
 PROMPT_HEADER
-  cat "$paper_path"
-  echo "---"
 } > "$prompt_file"
 
-tmp_out="${out_path}.tmp.$$"
+envelope_tmp="${out_path}.envelope.tmp.$$"
 err_file="${work_dir}/claude.err"
 
-# Run from work_dir → no CLAUDE.md auto-discovery from project tree.
-# --print: non-interactive, single response, exit.
-# --disable-slash-commands: skip skill resolution.
+t_start=$(date -u +%s)
 if ! ( cd "$work_dir" && claude --print --disable-slash-commands \
-       < "$prompt_file" > "$tmp_out" 2> "$err_file" ); then
-  echo "ERROR: claude failed for $paper_id run $run_id" >&2
+       --model "$model" --output-format json \
+       < "$prompt_file" > "$envelope_tmp" 2> "$err_file" ); then
+  echo "ERROR: claude failed for $paper_id run $run_id model $model" >&2
   echo "---stderr---" >&2
   cat "$err_file" >&2
-  rm -f "$tmp_out"
+  rm -f "$envelope_tmp"
   exit 3
 fi
+t_end=$(date -u +%s)
+wall_s=$(( t_end - t_start ))
 
-# Validate, strip optional fences/preamble, write canonical JSON.
-python3 - "$tmp_out" "$out_path" "$paper_id" "$run_id" <<'PY'
-import json, re, sys, os
-tmp_path, out_path, paper_id, run_id = sys.argv[1:5]
-text = open(tmp_path, encoding="utf-8").read().strip()
+# Parse envelope, extract response, validate schema, write canonical cell JSON.
+python3 - "$envelope_tmp" "$out_path" "$paper_id" "$run_id" "$model" "$wall_s" <<'PY'
+import json, re, sys, os, datetime as dt
+envelope_path, out_path, paper_id, run_id, requested_model, wall_s = sys.argv[1:7]
 
-m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-if m:
-    text = m.group(1)
+envelope = json.loads(open(envelope_path, encoding="utf-8").read())
 
-first = text.find("{")
-if first > 0:
-    text = text[first:]
-last = text.rfind("}")
-if last >= 0 and last < len(text) - 1:
-    text = text[: last + 1]
-
-try:
-    data = json.loads(text)
-except json.JSONDecodeError as e:
-    sys.stderr.write(f"JSON parse failure: {e}\n---raw (first 2000)---\n")
-    sys.stderr.write(text[:2000])
+if envelope.get("is_error"):
+    sys.stderr.write(f"envelope is_error=True: {envelope}\n")
     sys.exit(4)
 
-errs = []
-if data.get("paper_id") != paper_id:
-    errs.append(f"paper_id mismatch: expected {paper_id!r}, got {data.get('paper_id')!r}")
-if data.get("invocation") != "claude-cli-bare":
-    errs.append(f"invocation mismatch: got {data.get('invocation')!r}")
-if data.get("run_id") != int(run_id):
-    errs.append(f"run_id mismatch: expected {run_id}, got {data.get('run_id')!r}")
-if "response" not in data or "issues" not in data["response"]:
-    errs.append("missing response.issues")
-if errs:
-    sys.stderr.write("schema errors:\n  " + "\n  ".join(errs) + "\n")
+result_text = envelope.get("result", "").strip()
+
+# Strip optional code-fence wrap.
+m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", result_text, re.DOTALL)
+if m:
+    result_text = m.group(1)
+
+first = result_text.find("{")
+if first > 0:
+    result_text = result_text[first:]
+last = result_text.rfind("}")
+if last >= 0 and last < len(result_text) - 1:
+    result_text = result_text[: last + 1]
+
+try:
+    body = json.loads(result_text)
+except json.JSONDecodeError as e:
+    sys.stderr.write(f"JSON parse failure on model response: {e}\n")
+    sys.stderr.write("---raw (first 2000)---\n")
+    sys.stderr.write(result_text[:2000])
     sys.exit(5)
+
+if body.get("paper_id") != paper_id:
+    sys.stderr.write(f"paper_id mismatch: expected {paper_id!r}, got {body.get('paper_id')!r}\n")
+    sys.exit(6)
+if "response" not in body or "issues" not in body["response"]:
+    sys.stderr.write("missing response.issues\n")
+    sys.exit(7)
+
+# Identify the ACTUAL model served (vs. requested).
+actual_model_keys = list(envelope.get("modelUsage", {}).keys())
+if actual_model_keys:
+    actual_model = actual_model_keys[0].split("[")[0]
+else:
+    actual_model = "unknown"
+
+# Compose canonical cell JSON. Envelope is preserved in full for audit.
+cell = {
+    "paper_id": paper_id,
+    "model_requested": requested_model,
+    "model_actual": actual_model,
+    "run_at_utc": body.get("run_at_utc") or dt.datetime.now(dt.timezone.utc).isoformat(),
+    "dry_run": False,
+    "invocation": "claude-cli-bare",
+    "run_id": int(run_id),
+    "response": body["response"],
+    "metrics": {
+        "wall_clock_s": int(wall_s),
+        "duration_ms": envelope.get("duration_ms"),
+        "duration_api_ms": envelope.get("duration_api_ms"),
+        "num_turns": envelope.get("num_turns"),
+        "stop_reason": envelope.get("stop_reason"),
+        "total_cost_usd": envelope.get("total_cost_usd"),
+        "usage": envelope.get("usage", {}),
+        "modelUsage": envelope.get("modelUsage", {}),
+    },
+}
 
 out_tmp = out_path + ".tmp"
 with open(out_tmp, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
+    json.dump(cell, f, indent=2, ensure_ascii=False)
     f.write("\n")
 os.replace(out_tmp, out_path)
-print(f"ok: {paper_id} run={run_id} issues={len(data['response']['issues'])} -> {out_path}")
+
+n_issues = len(cell["response"]["issues"])
+in_tok = envelope.get("usage", {}).get("input_tokens", "?")
+out_tok = envelope.get("usage", {}).get("output_tokens", "?")
+cache_read = envelope.get("usage", {}).get("cache_read_input_tokens", "?")
+cost = envelope.get("total_cost_usd", "?")
+print(f"ok: {paper_id} run={run_id} model={actual_model} issues={n_issues} "
+      f"wall={wall_s}s api_ms={envelope.get('duration_api_ms','?')} "
+      f"in_tok={in_tok} out_tok={out_tok} cache_read={cache_read} "
+      f"cost=${cost} -> {out_path}")
 PY
 
-rm -f "$tmp_out"
+rm -f "$envelope_tmp"
