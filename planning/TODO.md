@@ -17,12 +17,13 @@
   - 각 조건에서 비판 지점 포착 수 측정
   - 결과물: "Fresh가 효과적인 이유" 정량화
 
-### 2. 인용 위조 방향성 분석 (3모델 비교)
+### 2. 인용 위조 방향성 분석 (cross-vendor 비교)
 - [ ] **인용 위조가 무작위인가, 확인 방향으로 편향되는가?**
-  - 3개 저장소의 위조 인용에 대해 Claude/GPT-4/Gemini 검증
+  - 3개 저장소의 위조 인용에 대해 Claude Opus 4.6 / Claude Opus 4.7 / GPT / Gemini 검증
   - 정확도 x 방향성(확인/비판) 교차 검정
   - "반대 증거를 찾아" 명시적 프롬프트 후 재시도
-  - 결과물: 구조화된 방향적 환각 실증
+  - 결과물: 구조화된 방향적 환각 실증 + cross-vendor generalization
+  - 주: model-version 내(4.6 vs 4.7) 비교는 Study 1 replication arm에서 다루므로 본 항목은 cross-vendor에 집중.
 
 ### 3. 편향 누적 시간 곡선 (T0-T3)
 - [ ] **Deep Session이 편향되는 속도 측정**
