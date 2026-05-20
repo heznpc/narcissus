@@ -3,6 +3,11 @@
 > Analysis date: 2026-03-26
 > Scope: git diff origin/main → HEAD (pre-correction) across 5 repos
 > Method: Manual classification of every citation added in local-only commits
+> **Status (2026-05-21): EXPLORATORY — single-rater. Inter-rater reliability
+> not yet measured. SHAs partially lost post-audit due to history rewrites in
+> 2 of 3 audited repos. See `../data/raw/audit-manifest-2026-05-21.md` for
+> the frozen reference SHAs and the reproducibility note. A two-rater
+> re-classification (with Cohen's κ) is scheduled as Study 1.**
 
 ---
 

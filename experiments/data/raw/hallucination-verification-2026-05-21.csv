@@ -1,0 +1,5 @@
+citation_id,short_title,ai_suggested_author,actual_author_verified,verification_source,domain_coherent_fabrication,paper_exists,result
+1,12-LMIC play study,"Atabey, D.","Iannelli, O., Naderbagi, A., et al.",Nature Humanities & Social Sciences Communications 2025 (s41599-025-06354-x),unknown_atabey,yes,HALLUCINATION_CONFIRMED
+2,Folk in the Age of Algorithms,"Blank, T.J. & Kitta, A.","Flinterud, G.",Folklore (Taylor & Francis) 2023 (10.1080/0015587X.2023.2233839),yes_both_real_folklorists_in_subfield,yes,HALLUCINATION_CONFIRMED
+3,CFDS Indonesia Roblox,Universitas Indonesia (CfDS),Universitas Gadjah Mada (CfDS UGM),digitalsociety.id 2025 (Roblox and Children: Between Creativity Risks and Responsibility),yes_wrong_university_correct_acronym,yes_blog_post,HALLUCINATION_CONFIRMED
+4,Memetic performance,"Melo, G.S.","Cervi, L. & Divon, T. (2023) OR Frontiers Comm 2025 authors",Social Media + Society 2023 (10.1177/20563051231157607) / Frontiers Comm 2025,unverified_melo_not_found,yes,HALLUCINATION_CONFIRMED
