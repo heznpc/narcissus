@@ -24,9 +24,11 @@ prompt_style="${4:-adversarial}"   # adversarial | neutral
 start_run="${5:-1}"                # 1-indexed start for run-id; useful for
                                     # extending an existing batch (e.g. to add
                                     # run-6..10 to an existing 5-run set).
+context_mode="${6:-fresh}"          # fresh | collaborator
 safe_model="${model//\//_}"
-style_suffix=""
-[[ "$prompt_style" != "adversarial" ]] && style_suffix="__${prompt_style}"
+tag="bare"
+[[ "$prompt_style" != "adversarial" ]] && tag="${tag}__${prompt_style}"
+[[ "$context_mode" != "fresh" ]] && tag="${tag}__${context_mode}"
 end_run=$(( start_run + n_runs - 1 ))
 
 PAPER_PATHS=(
@@ -48,14 +50,17 @@ mkdir -p "$OUT_DIR" "$LOG_DIR"
 n_papers="${#PAPER_PATHS[@]}"
 expected=$(( n_runs * n_papers ))
 
-log_ts() { echo "[$(date -u +%FT%TZ)] $*"; }
+# Log to stderr so $(run_one_pass) captures only the produced count.
+# Master log redirection in the launcher uses 2>&1 to fold stderr into the
+# logfile, so observable behavior of the master log is unchanged.
+log_ts() { echo "[$(date -u +%FT%TZ)] $*" >&2; }
 
 count_done() {
   local cnt=0
   for entry in "${PAPER_PATHS[@]}"; do
     local pid="${entry%%:*}"
     for r in $(seq "$start_run" "$end_run"); do
-      [[ -f "${OUT_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.json" ]] && cnt=$(( cnt + 1 ))
+      [[ -f "${OUT_DIR}/${pid}__${safe_model}__${tag}__run-${r}.json" ]] && cnt=$(( cnt + 1 ))
     done
   done
   echo "$cnt"
@@ -70,12 +75,12 @@ run_one_pass() {
     for entry in "${PAPER_PATHS[@]}"; do
       local pid="${entry%%:*}"
       local ppath="${entry#*:}"
-      local out="${OUT_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.json"
+      local out="${OUT_DIR}/${pid}__${safe_model}__${tag}__run-${r}.json"
       [[ -f "$out" ]] && continue
       needed=$(( needed + 1 ))
-      local log="${LOG_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.log"
-      log_ts "  launch ${pid} run=${r} model=${model} style=${prompt_style}"
-      bash "$CELL_RUNNER" "$pid" "$ppath" "$OUT_DIR" "$r" "$model" "$prompt_style" > "$log" 2>&1 &
+      local log="${LOG_DIR}/${pid}__${safe_model}__${tag}__run-${r}.log"
+      log_ts "  launch ${pid} run=${r} model=${model} style=${prompt_style} ctx=${context_mode}"
+      bash "$CELL_RUNNER" "$pid" "$ppath" "$OUT_DIR" "$r" "$model" "$prompt_style" "$context_mode" > "$log" 2>&1 &
       pids+=( $! )
     done
     if (( ${#pids[@]} == 0 )); then
