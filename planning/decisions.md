@@ -70,3 +70,31 @@ All eight fixes are documented in-paper at the corresponding §; bibliography ex
 **Why**: The natural experiment's data are frozen in time and cannot be retroactively updated to 4.7; rewriting §2 would falsify the historical record. The right move is to (a) keep §2 accurate, (b) explicitly acknowledge the version gap in §6, and (c) build version replication into the prospective studies. This converts a known limitation into a planned empirical contribution.
 
 **Cost**: Study 1 doubles in size (each paper reviewed twice — under 4.6 and 4.7). Study 2 AI-assisted cells require 32 participants each, distributed 16/16 across versions; the total N=128 design remains valid.
+
+---
+
+## 2026-05-21 -- Model label correctness + cross-version replication completed
+
+**Context**: First multirun (25 cells, 2026-05-21 morning) was launched without `--model` flag in the `claude --print` invocations. Claude Code's default model is claude-opus-4-6 (1M context), and the cells were therefore served by 4.6 while labeled "claude-opus-4-7". Discovered via the envelope's `modelUsage` key when `--output-format json` was added.
+
+**Decision**: Relabel the 26 existing cells to 4.6 (their actual identity) and re-run a true 4.7 batch of 25 cells with explicit `--model claude-opus-4-7`. The 50-cell corpus (25 4.6 + 25 4.7) is the canonical Study 1 dataset.
+
+- Relabeled: filenames changed from `__claude-opus-4-7__` to `__claude-opus-4-6__`; `model` field inside each JSON updated; `_relabel_note` added documenting the investigation.
+- New 4.7 batch: completed in 8 wall minutes via the now model-aware multirun (`run_study1_multirun.sh 5 8 claude-opus-4-7`). 25 cells, $28.52 total, $1.14/cell average.
+- Per-cell envelope captured (duration, cost, usage, modelUsage) so future label drift is detectable at write time.
+
+**Results (analyzed via experiments/src/compare_model_versions.py)**:
+- Cross-version stable-core intersection: 4/5/1/4/1 sections (narcissus / analogic / z-gap / eddy / ploidy). Structural critique magnets persist across the version boundary.
+- Cross-version Jaccard mean 0.269; within-4.6 Jaccard 0.348. The gap (~0.08) is much smaller than within-version stochasticity, so the diagnosis is largely model-architecture-stable.
+- Fleiss kappa: 4.6 mean 0.276, 4.7 mean 0.203. 4.7 is somewhat more variable within version on 3/5 papers; on the other 2, 4.7 is more consistent than 4.6.
+
+**Paper updates (§4.1 and §6)**:
+- §4.1 model-version replication arm subsection: replaced the prospective-only description with a "preliminary multi-run replication results" subsection reporting the cross-version Jaccard (0.27), within-version Jaccard (0.35), Fleiss kappa per version, and the structural-magnet finding.
+- §6 model specificity limitation: rewrote to incorporate the actual cross-version numbers and acknowledge that the 4.7 batch had been performed.
+- §6 new limitation "single-rater audit, audit-time drift": acknowledges that single-pass audit results (Table 2) reflect one draw from a noisy detection process (~35% capture rate per single pass), and that some affected rows are now "caught and acted on" rather than "caught and persisting" (e.g., the ploidy Husserl row was removed in revision and is no longer in the manuscript text).
+
+**Ploidy Husserl resolution (point (d) of the user's 9-dimension review)**: confirmed via grep of all branches of ploidy/paper/*.tex that "Husserl" / "epoche" / "phenomenological" has never been in the manuscript text. The original audit critique reflected the ploidy *outline* document; the active-vs-passive epoché conflation was removed before the LaTeX manuscript was first committed.
+
+**Cost (transparency)**: 4.7 batch total $28.52 ($1.14/cell). 4.6 batch pre-envelope, estimated $8–12. Aggregate Study 1 (replication arm only): $40–50.
+
+**Outstanding (m-level)**: 4.6 batch lacks per-cell envelope data; if needed for cost/timing reporting, the batch can be re-run with the new envelope-capturing runner (another $10 at 4.6 prices). Cross-vendor (GPT, Gemini, open-weights) remains TODO #2.
