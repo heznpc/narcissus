@@ -21,9 +21,13 @@ n_runs="${1:-5}"
 max_resets="${2:-8}"
 model="${3:-claude-opus-4-7}"
 prompt_style="${4:-adversarial}"   # adversarial | neutral
+start_run="${5:-1}"                # 1-indexed start for run-id; useful for
+                                    # extending an existing batch (e.g. to add
+                                    # run-6..10 to an existing 5-run set).
 safe_model="${model//\//_}"
 style_suffix=""
 [[ "$prompt_style" != "adversarial" ]] && style_suffix="__${prompt_style}"
+end_run=$(( start_run + n_runs - 1 ))
 
 PAPER_PATHS=(
   "narcissus:/Users/ren/IdeaProjects/Paper/narcissus/paper/main.tex"
@@ -50,7 +54,7 @@ count_done() {
   local cnt=0
   for entry in "${PAPER_PATHS[@]}"; do
     local pid="${entry%%:*}"
-    for r in $(seq 1 "$n_runs"); do
+    for r in $(seq "$start_run" "$end_run"); do
       [[ -f "${OUT_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.json" ]] && cnt=$(( cnt + 1 ))
     done
   done
@@ -60,7 +64,7 @@ count_done() {
 # Run all incomplete cells once. Returns the number of NEW cells produced.
 run_one_pass() {
   local before=$(count_done)
-  for r in $(seq 1 "$n_runs"); do
+  for r in $(seq "$start_run" "$end_run"); do
     local pids=()
     local needed=0
     for entry in "${PAPER_PATHS[@]}"; do
@@ -104,9 +108,9 @@ print(int(seconds_until_next_reset(jitter_seconds=30)))
   log_ts "wake — retrying"
 }
 
-log_ts "multirun v3 starting: model=$model n_runs=$n_runs n_papers=$n_papers expected=$expected max_resets=$max_resets"
+log_ts "multirun v3 starting: model=$model style=$prompt_style runs=${start_run}..${end_run} n_papers=$n_papers expected=$expected max_resets=$max_resets"
 log_ts "out_dir=$OUT_DIR"
-log_ts "initial completed (for model=$model): $(count_done)/$expected"
+log_ts "initial completed (for model=$model style=$prompt_style runs $start_run..$end_run): $(count_done)/$expected"
 
 reset_count=0
 while true; do
