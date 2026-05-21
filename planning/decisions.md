@@ -98,3 +98,28 @@ All eight fixes are documented in-paper at the corresponding §; bibliography ex
 **Cost (transparency)**: 4.7 batch total $28.52 ($1.14/cell). 4.6 batch pre-envelope, estimated $8–12. Aggregate Study 1 (replication arm only): $40–50.
 
 **Outstanding (m-level)**: 4.6 batch lacks per-cell envelope data; if needed for cost/timing reporting, the batch can be re-run with the new envelope-capturing runner (another $10 at 4.6 prices). Cross-vendor (GPT, Gemini, open-weights) remains TODO #2.
+
+---
+
+## 2026-05-21 -- Adversarial vs Neutral reviewer stance comparison
+
+**Context**: The pre-experiment review added a C3 caveat to §2.1 noting that the Fresh Agents' adversarial-reviewer prompt is a confound with context depth and cannot be cleanly isolated by §2 data alone. To directly test this dimension, 25 new cells were generated 2026-05-21 with an otherwise-identical Fresh-session pipeline but a neutral reviewer prompt (5 papers × 5 runs at Opus 4.6 / `prompt_style=neutral`).
+
+**Decision**: Add stance-comparison results to paper §2.1 caveat and §6 limitations rather than leaving the §2.1 caveat with no direct evidence.
+
+**Method**: cell runner extended with 6th positional arg `prompt_style` (adversarial | neutral); multirun launcher passes through; output filenames distinguish via `__neutral__` suffix. Same model, same prompt-isolation regime, same JSON schema. Comparison via `experiments/src/compare_stances.py`.
+
+**Results** (50 cells, $7.71 marginal cost for the neutral arm):
+- Total per-cell issue count nearly identical: 13.16 (adv) vs 12.56 (neu), mean −5% across 5 papers (range −15% to +18%).
+- Severity distribution differs SUBSTANTIALLY: critical issues drop 62→38 (−39%), major 173→147 (−15%), minor 94→129 (+37%).
+- Stable-core (5/5) overlap: 14 of 19 union stable sections are in BOTH stance cores. Neutral cores are predominantly subsets of adversarial cores (e.g., narcissus 4/4, eddy 2/2, analogic 4/5).
+- Mean cross-stance Jaccard: 0.267 — about the same as the cross-version Jaccard (0.269). Stance change ≈ model-version change in impact, both << run-to-run stochasticity (0.348 within-stance).
+- Mean Fleiss κ within stance: 0.276 (adv) vs 0.195 (neu). Neutral is less consistent — more degrees of freedom without "find weaknesses" instruction.
+
+**Interpretation**: adversarial framing does NOT fabricate critiques — it RE-GRADES them upward. The same structural concerns are flagged in both stances; under neutral framing many are reported as minor that under adversarial framing are reported as critical or major. The §2.1 Table 2 detection signal is robust to stance; the absolute severity tier in any single-stance audit is stance-dependent.
+
+**Paper updates**:
+- §2.1 added a new paragraph "Partial isolation of the adversarial-framing confound (2026-05-21 stance comparison)" with the numbers above and the conclusion that detection coverage is stance-robust while severity grading is not.
+- §6 added a new limitation "Severity-tier stance dependence" recommending future audits report stance explicitly and aggregate across multiple stances.
+
+**Cost transparency**: 4.6-neutral batch $7.71 ($0.31/cell). About 3.7× cheaper than 4.7-adversarial for substantially the same structural-signal information. The neutral arm completed in ~13 wall minutes (5-way parallel, no quota wall) within a single quota window.

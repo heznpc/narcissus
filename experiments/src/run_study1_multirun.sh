@@ -20,7 +20,10 @@ set -uo pipefail
 n_runs="${1:-5}"
 max_resets="${2:-8}"
 model="${3:-claude-opus-4-7}"
+prompt_style="${4:-adversarial}"   # adversarial | neutral
 safe_model="${model//\//_}"
+style_suffix=""
+[[ "$prompt_style" != "adversarial" ]] && style_suffix="__${prompt_style}"
 
 PAPER_PATHS=(
   "narcissus:/Users/ren/IdeaProjects/Paper/narcissus/paper/main.tex"
@@ -48,7 +51,7 @@ count_done() {
   for entry in "${PAPER_PATHS[@]}"; do
     local pid="${entry%%:*}"
     for r in $(seq 1 "$n_runs"); do
-      [[ -f "${OUT_DIR}/${pid}__${safe_model}__bare__run-${r}.json" ]] && cnt=$(( cnt + 1 ))
+      [[ -f "${OUT_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.json" ]] && cnt=$(( cnt + 1 ))
     done
   done
   echo "$cnt"
@@ -63,12 +66,12 @@ run_one_pass() {
     for entry in "${PAPER_PATHS[@]}"; do
       local pid="${entry%%:*}"
       local ppath="${entry#*:}"
-      local out="${OUT_DIR}/${pid}__${safe_model}__bare__run-${r}.json"
+      local out="${OUT_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.json"
       [[ -f "$out" ]] && continue
       needed=$(( needed + 1 ))
-      local log="${LOG_DIR}/${pid}__${safe_model}__bare__run-${r}.log"
-      log_ts "  launch ${pid} run=${r} model=${model}"
-      bash "$CELL_RUNNER" "$pid" "$ppath" "$OUT_DIR" "$r" "$model" > "$log" 2>&1 &
+      local log="${LOG_DIR}/${pid}__${safe_model}__bare${style_suffix}__run-${r}.log"
+      log_ts "  launch ${pid} run=${r} model=${model} style=${prompt_style}"
+      bash "$CELL_RUNNER" "$pid" "$ppath" "$OUT_DIR" "$r" "$model" "$prompt_style" > "$log" 2>&1 &
       pids+=( $! )
     done
     if (( ${#pids[@]} == 0 )); then

@@ -30,11 +30,17 @@ paper_path="${2:?paper_path required}"
 out_dir="${3:?out_dir required}"
 run_id="${4:?run_id required}"
 model="${5:-claude-opus-4-7}"
+prompt_style="${6:-adversarial}"   # adversarial | neutral
 
-# Filename uses the exact requested model. Verification of actual model
-# served happens via the envelope's modelUsage key (recorded in the cell).
+# Filename uses the exact requested model + prompt style. Adversarial files
+# keep the legacy '__bare__' tag (no style suffix) for back-compat with the
+# already-collected corpus. Non-adversarial styles get an explicit suffix.
 safe_model="${model//\//_}"
-out_path="${out_dir}/${paper_id}__${safe_model}__bare__run-${run_id}.json"
+if [[ "$prompt_style" == "adversarial" ]]; then
+  out_path="${out_dir}/${paper_id}__${safe_model}__bare__run-${run_id}.json"
+else
+  out_path="${out_dir}/${paper_id}__${safe_model}__bare__${prompt_style}__run-${run_id}.json"
+fi
 
 if [ -f "$out_path" ]; then
   echo "skip (exists): $out_path"
@@ -50,8 +56,24 @@ work_dir="$(mktemp -d -t narcissus-fresh-XXXXXX)"
 trap 'rm -rf "$work_dir"' EXIT
 
 prompt_file="${work_dir}/prompt.txt"
-{
-  cat <<PROMPT_HEADER
+
+if [[ "$prompt_style" == "neutral" ]]; then
+  read -r -d '' STANCE_HEADER <<'NEUTRAL'
+You are a peer reviewer of an academic manuscript. You have NO prior
+context about this manuscript, its authors, the project, or the broader
+research program. Read it as if it just arrived in your reviewer queue.
+
+Read on its merits. Note both the manuscript's strengths and its
+weaknesses; identify issues that would warrant author response (factual,
+methodological, statistical, evidentiary, clarity). Be specific — cite
+section labels or line ranges. You are NOT the author. Do not soften
+criticism, but also do not adversarially seek faults that are not there.
+Report only issues you would actually flag in a real peer review. There
+is no minimum issue count; if the paper is solid in a section, do not
+manufacture concerns. Severity in {critical, major, minor}.
+NEUTRAL
+else
+  read -r -d '' STANCE_HEADER <<'ADVERSARIAL'
 You are an adversarial peer reviewer of an academic manuscript. You have
 NO prior context about this manuscript, its authors, the project, or the
 broader research program. Read it as if it just arrived in your reviewer
@@ -62,7 +84,12 @@ unstated assumptions, methodological issues, statistical concerns, and
 factual problems. Be specific — cite section labels or line ranges. You
 are NOT the author. Do not soften criticism. Aim for 5-15 substantive
 issues; severity in {critical, major, minor}.
+ADVERSARIAL
+fi
 
+{
+  printf '%s\n\n' "$STANCE_HEADER"
+  cat <<PROMPT_HEADER
 Return ONLY a JSON object (NO preamble, NO Markdown code fences) with
 this exact schema:
 
@@ -107,9 +134,9 @@ t_end=$(date -u +%s)
 wall_s=$(( t_end - t_start ))
 
 # Parse envelope, extract response, validate schema, write canonical cell JSON.
-python3 - "$envelope_tmp" "$out_path" "$paper_id" "$run_id" "$model" "$wall_s" <<'PY'
+python3 - "$envelope_tmp" "$out_path" "$paper_id" "$run_id" "$model" "$wall_s" "$prompt_style" <<'PY'
 import json, re, sys, os, datetime as dt
-envelope_path, out_path, paper_id, run_id, requested_model, wall_s = sys.argv[1:7]
+envelope_path, out_path, paper_id, run_id, requested_model, wall_s, prompt_style = sys.argv[1:8]
 
 envelope = json.loads(open(envelope_path, encoding="utf-8").read())
 
@@ -158,6 +185,7 @@ cell = {
     "paper_id": paper_id,
     "model_requested": requested_model,
     "model_actual": actual_model,
+    "prompt_style": prompt_style,
     "run_at_utc": body.get("run_at_utc") or dt.datetime.now(dt.timezone.utc).isoformat(),
     "dry_run": False,
     "invocation": "claude-cli-bare",
