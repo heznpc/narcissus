@@ -156,6 +156,11 @@ t_end=$(date -u +%s)
 wall_s=$(( t_end - t_start ))
 
 # Parse envelope, extract response, validate schema, write canonical cell JSON.
+# FIX (code review #5): capture Python's exit code so a schema validation
+# failure (exit 4/5/6/7/8) does not silently turn into a wrapper exit 0 via
+# the trailing `rm -f`. Previously the launcher counted such failures as
+# 'no progress this pass' and burned 5h reset cycles on deterministic bugs.
+set +e
 python3 - "$envelope_tmp" "$out_path" "$paper_id" "$run_id" "$model" "$wall_s" "$prompt_style" "$context_mode" <<'PY'
 import json, re, sys, os, datetime as dt
 envelope_path, out_path, paper_id, run_id, requested_model, wall_s, prompt_style, context_mode = sys.argv[1:9]
@@ -168,22 +173,64 @@ if envelope.get("is_error"):
 
 result_text = envelope.get("result", "").strip()
 
-# Strip optional code-fence wrap.
-m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", result_text, re.DOTALL)
-if m:
-    result_text = m.group(1)
+# FIX (code review #14): the previous greedy regex `({.*})` would swallow
+# any prose-with-braces before/after the fenced block, producing invalid
+# JSON. Try candidate extraction strategies in order, parsing each:
+#   1) the LAST fenced ```json ... ``` block (model often emits prose
+#      first, then the JSON answer)
+#   2) the LAST fenced ``` ... ``` block (no `json` tag)
+#   3) the largest brace-balanced substring (greedy but bracket-aware)
+def _extract_json_candidates(text: str):
+    candidates = []
+    # Strategy 1+2: find ALL fenced blocks (json or untagged), prefer the last.
+    for pat in (
+        r"```json\s*(\{.*?\})\s*```",
+        r"```\s*(\{.*?\})\s*```",
+    ):
+        for m in re.finditer(pat, text, re.DOTALL):
+            candidates.append(m.group(1))
+    # Strategy 3: bracket-balanced scan — find the LAST top-level {...}.
+    depth = 0
+    start = -1
+    last_block = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                last_block = text[start : i + 1]
+    if last_block:
+        candidates.append(last_block)
+    return candidates
 
-first = result_text.find("{")
-if first > 0:
-    result_text = result_text[first:]
-last = result_text.rfind("}")
-if last >= 0 and last < len(result_text) - 1:
-    result_text = result_text[: last + 1]
+body = None
+parse_errors = []
+for cand in reversed(_extract_json_candidates(result_text)):
+    try:
+        body = json.loads(cand)
+        break
+    except json.JSONDecodeError as e:
+        parse_errors.append(str(e))
 
-try:
-    body = json.loads(result_text)
-except json.JSONDecodeError as e:
-    sys.stderr.write(f"JSON parse failure on model response: {e}\n")
+if body is None:
+    sys.stderr.write(f"JSON parse failure on model response (tried {len(parse_errors)} candidates)\n")
+    for e in parse_errors[:3]:
+        sys.stderr.write(f"  - {e}\n")
     sys.stderr.write("---raw (first 2000)---\n")
     sys.stderr.write(result_text[:2000])
     sys.exit(5)
@@ -196,11 +243,39 @@ if "response" not in body or "issues" not in body["response"]:
     sys.exit(7)
 
 # Identify the ACTUAL model served (vs. requested).
-actual_model_keys = list(envelope.get("modelUsage", {}).keys())
-if actual_model_keys:
-    actual_model = actual_model_keys[0].split("[")[0]
-else:
-    actual_model = "unknown"
+# FIX (code review #11): the previous code picked the first dict key —
+# arbitrary order if multiple models showed up. Now we prefer the key
+# matching the request; only if that's absent do we fall back to the
+# first key (and we surface the mismatch).
+mu = envelope.get("modelUsage", {}) or {}
+actual_model_keys = list(mu.keys())
+actual_model = "unknown"
+for k in actual_model_keys:
+    bare_k = k.split("[")[0]
+    if bare_k == requested_model:
+        actual_model = bare_k
+        break
+if actual_model == "unknown" and actual_model_keys:
+    # Prefer the highest-token-usage model when we have to guess.
+    best_key = max(
+        actual_model_keys,
+        key=lambda k: (mu[k] or {}).get("inputTokens", 0)
+                       + (mu[k] or {}).get("outputTokens", 0),
+    )
+    actual_model = best_key.split("[")[0]
+
+# FIX (code review #7): validate the actual model served matches the
+# requested model. The original May 2026 mislabeling regression was
+# possible because no comparison was made — the cell filename uses the
+# requested model name, so a silent default-routing would re-create the
+# same bug.
+if actual_model != requested_model and actual_model != "unknown":
+    sys.stderr.write(
+        f"MODEL MISMATCH: requested={requested_model!r} but envelope "
+        f"reports actual={actual_model!r}; refusing to write cell file "
+        f"(would silently mislabel data).\n"
+    )
+    sys.exit(8)
 
 # Compose canonical cell JSON. Envelope is preserved in full for audit.
 cell = {
@@ -242,5 +317,13 @@ print(f"ok: {paper_id} run={run_id} model={actual_model} issues={n_issues} "
       f"in_tok={in_tok} out_tok={out_tok} cache_read={cache_read} "
       f"cost=${cost} -> {out_path}")
 PY
-
+py_exit=$?
+set -uo pipefail
 rm -f "$envelope_tmp"
+if (( py_exit != 0 )); then
+  # The cell did not produce a valid output file. Surface this loudly so the
+  # launcher can distinguish a deterministic schema/parse/model bug from a
+  # quota-wall sleep cycle.
+  echo "ERROR: cell validation failed (python exit=$py_exit) for $paper_id run=$run_id model=$model" >&2
+  exit "$py_exit"
+fi

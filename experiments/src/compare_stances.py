@@ -162,9 +162,16 @@ def main() -> None:
         a = r["adv"]; n = r["neu"]
         adv_str = f"{a['issue_count_mean']:.1f}±{a['issue_count_stdev']:.1f}"
         neu_str = f"{n['issue_count_mean']:.1f}±{n['issue_count_stdev']:.1f}"
-        delta_pct = (n['issue_count_mean'] - a['issue_count_mean']) / a['issue_count_mean'] * 100
+        # FIX (code review #13): guard against divide-by-zero when the
+        # adversarial cell has zero issues (all-empty runs) or no runs.
+        a_mean = a['issue_count_mean']
+        if a_mean and a_mean == a_mean:  # not 0, not NaN
+            delta_pct = (n['issue_count_mean'] - a_mean) / a_mean * 100
+            delta_str = f"{delta_pct:>+5.0f}%"
+        else:
+            delta_str = "  n/a"
         print(f"{r['paper']:<25} {adv_str:>15} {neu_str:>15} "
-              f"{delta_pct:>+5.0f}% {a['fleiss_kappa']:>7.3f} "
+              f"{delta_str:>6} {a['fleiss_kappa']:>7.3f} "
               f"{n['fleiss_kappa']:>7.3f} {r['cross']['mean']:>7.3f}")
 
     # Aggregate.
@@ -173,14 +180,23 @@ def main() -> None:
     all_xj = [p_["jaccard"] for r in rows for p_ in [
         {"jaccard": j} for j in [r["cross"]["mean"]]] if not (p_["jaccard"] != p_["jaccard"])]
     print("-" * 80)
-    overall_adv = statistics.mean(adv_means)
-    overall_neu = statistics.mean(neu_means)
-    overall_delta = (overall_neu - overall_adv) / overall_adv * 100
+    overall_adv = statistics.mean(adv_means) if adv_means else float("nan")
+    overall_neu = statistics.mean(neu_means) if neu_means else float("nan")
+    # FIX (code review #14): same divide-by-zero guard at the aggregate.
+    if overall_adv and overall_adv == overall_adv:
+        overall_delta_str = f"{(overall_neu - overall_adv) / overall_adv * 100:>+5.0f}%"
+    else:
+        overall_delta_str = "  n/a"
+
+    def _safe_mean(values):
+        clean = [v for v in values if v == v]  # filter NaN
+        return statistics.mean(clean) if clean else float("nan")
+
     print(f"{'MEAN':<25} {overall_adv:>15.2f} {overall_neu:>15.2f} "
-          f"{overall_delta:>+5.0f}% "
-          f"{statistics.mean(r['adv']['fleiss_kappa'] for r in rows):>7.3f} "
-          f"{statistics.mean(r['neu']['fleiss_kappa'] for r in rows):>7.3f} "
-          f"{statistics.mean(r['cross']['mean'] for r in rows):>7.3f}")
+          f"{overall_delta_str:>6} "
+          f"{_safe_mean([r['adv']['fleiss_kappa'] for r in rows]):>7.3f} "
+          f"{_safe_mean([r['neu']['fleiss_kappa'] for r in rows]):>7.3f} "
+          f"{_safe_mean([r['cross']['mean'] for r in rows]):>7.3f}")
     print()
 
     # Severity totals.

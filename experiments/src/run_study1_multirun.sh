@@ -66,8 +66,22 @@ count_done() {
   echo "$cnt"
 }
 
+# FIX (code review #6): track per-cell exit codes so we can distinguish
+# quota walls from deterministic failures. Exit 3 = claude --print failed
+# (typically a quota / rate-limit / overload error). Exit 4-8 = cell-runner
+# validation failures (Python schema, model mismatch, etc). Anything else
+# is an unexpected error.
+# The launcher reads QUOTA_FAILURES and DETERMINISTIC_FAILURES (globals
+# written by run_one_pass) to decide whether to sleep or bail.
+QUOTA_FAILURES=0
+DETERMINISTIC_FAILURES=0
+UNEXPECTED_FAILURES=0
+
 # Run all incomplete cells once. Returns the number of NEW cells produced.
 run_one_pass() {
+  QUOTA_FAILURES=0
+  DETERMINISTIC_FAILURES=0
+  UNEXPECTED_FAILURES=0
   local before=$(count_done)
   for r in $(seq "$start_run" "$end_run"); do
     local pids=()
@@ -87,9 +101,16 @@ run_one_pass() {
       continue
     fi
     for p in "${pids[@]}"; do
-      wait "$p" || true
+      local rc=0
+      wait "$p" || rc=$?
+      case "$rc" in
+        0)   : ;;
+        3)   QUOTA_FAILURES=$(( QUOTA_FAILURES + 1 )) ;;
+        4|5|6|7|8) DETERMINISTIC_FAILURES=$(( DETERMINISTIC_FAILURES + 1 )) ;;
+        *)   UNEXPECTED_FAILURES=$(( UNEXPECTED_FAILURES + 1 )) ;;
+      esac
     done
-    log_ts "  batch run=$r: needed=$needed completed_files=$(count_done)"
+    log_ts "  batch run=$r: needed=$needed completed_files=$(count_done) quota_fail=$QUOTA_FAILURES det_fail=$DETERMINISTIC_FAILURES unexp_fail=$UNEXPECTED_FAILURES"
   done
   local after=$(count_done)
   echo "$(( after - before ))"
@@ -117,6 +138,25 @@ log_ts "multirun v3 starting: model=$model style=$prompt_style runs=${start_run}
 log_ts "out_dir=$OUT_DIR"
 log_ts "initial completed (for model=$model style=$prompt_style runs $start_run..$end_run): $(count_done)/$expected"
 
+# Write intent file for the watchdog (code review #1, #2). The watchdog
+# refuses to act without this file, and uses these args verbatim for
+# relaunch — so a non-default batch never gets clobbered with defaults.
+INTENT_FILE="${REPO_ROOT}/experiments/state/multirun-intent.env"
+mkdir -p "$(dirname "$INTENT_FILE")"
+cat > "$INTENT_FILE" <<EOF
+INTENT_MODEL="${model}"
+INTENT_STYLE="${prompt_style}"
+INTENT_CONTEXT="${context_mode}"
+INTENT_START_RUN=${start_run}
+INTENT_N_RUNS=${n_runs}
+INTENT_MAX_RESETS=${max_resets}
+INTENT_PID=$$
+INTENT_TAG="${tag}"
+EOF
+
+# Clean up the intent file on normal exit so the watchdog stops trying.
+trap 'rm -f "$INTENT_FILE"' EXIT
+
 reset_count=0
 while true; do
   done_before=$(count_done)
@@ -136,6 +176,15 @@ while true; do
   fi
 
   if (( produced == 0 )); then
+    # FIX (code review #6): only sleep through a 5h reset if the zero-progress
+    # is plausibly a quota wall. If any cell failed with a deterministic
+    # validation error (Python schema/parse/model-mismatch), bail
+    # immediately — no amount of waiting will fix a wrong --model arg or
+    # a broken prompt.
+    if (( DETERMINISTIC_FAILURES > 0 || UNEXPECTED_FAILURES > 0 )); then
+      log_ts "ERROR: zero progress with non-quota failures (det=$DETERMINISTIC_FAILURES unexp=$UNEXPECTED_FAILURES); refusing to sleep — fix the config and re-run"
+      exit 3
+    fi
     reset_count=$(( reset_count + 1 ))
     if (( reset_count > max_resets )); then
       log_ts "ERROR: zero progress for ${max_resets} consecutive reset cycles; bailing"

@@ -179,9 +179,14 @@ def main() -> None:
         for c in cells:
             line += f"{rows[p][c]['kappa']:>13.3f} "
         print(line)
+    # FIX (code review #15): statistics.mean of an empty list raises
+    # StatisticsError. Filter NaN, then default to NaN when empty.
+    def _safe_kappa_mean(c):
+        vals = [rows[p][c]['kappa'] for p in PAPERS
+                if rows[p][c]['kappa'] == rows[p][c]['kappa']]
+        return statistics.mean(vals) if vals else float("nan")
     print(f"  {'MEAN across papers':<25} " + "".join(
-        f"{statistics.mean(rows[p][c]['kappa'] for p in PAPERS if rows[p][c]['kappa'] == rows[p][c]['kappa']):>13.3f} "
-        for c in cells
+        f"{_safe_kappa_mean(c):>13.3f} " for c in cells
     ))
     print()
 
