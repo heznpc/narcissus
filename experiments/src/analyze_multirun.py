@@ -33,7 +33,13 @@ RUNS = list(range(1, 6))
 #   (b) For label form, look up the canonical S-number from each paper's
 #       parsed section/subsection/label structure.
 
-_RE_SEC = re.compile(r"(?:S|§|Sec(?:tion)?\.?\s*)\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
+# FIX (code review): require a word boundary before lone 'S' to prevent
+# false-matches like 'NASA 5' -> 'S5' or 'IS 3' -> 'S3'. § and 'Sec[tion]'
+# are unambiguous on their own.
+_RE_SEC = re.compile(
+    r"(?:\bS|§|\bSec(?:tion)?\.?\s*)\s*(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
 _RE_LABEL = re.compile(r"sec:([a-zA-Z0-9_\-]+)", re.IGNORECASE)
 
 
@@ -65,13 +71,25 @@ def _build_label_index() -> dict[str, dict[str, str]]:
         sec_n = 0
         sub_n = 0
         subsub_n = 0
+        # FIX (code review #11): capture the * (starred) marker so we can
+        # skip numbering for unnumbered sections like \section*{Acknowledgments}.
+        # Previously sec_n was incremented for starred sections, corrupting
+        # all subsequent canonical S-numbers in the label map.
         token_re = re.compile(
-            r"\\(section|subsection|subsubsection)\*?\{[^}]*\}"
+            r"\\(section|subsection|subsubsection)(\*?)\{[^}]*\}"
             r"(?:\s*\\label\{sec:([a-zA-Z0-9_\-]+)\})?",
         )
         for m in token_re.finditer(text):
             level = m.group(1)
-            label = m.group(2)
+            starred = m.group(2) == "*"
+            label = m.group(3)
+            if starred:
+                # Starred sections are unnumbered in LaTeX; don't bump counters.
+                # If a label is on a starred section, we still record it but
+                # under a sec:<label> form (no canonical S-number exists).
+                if label:
+                    labels[label.lower()] = f"sec:{label.lower()}"
+                continue
             if level == "section":
                 sec_n += 1
                 sub_n = 0
@@ -124,8 +142,32 @@ def normalize_section(raw: str, paper_id: str = "") -> tuple[str, ...]:
     return (raw.strip()[:40],)
 
 
-def load_run(paper: str, run: int) -> dict | None:
-    f = OUT_DIR / f"{paper}__claude-opus-4-7__bare__run-{run}.json"
+# FIX (code review #4): model/stance/context are no longer hardcoded.
+# The default is the highest-N model+stance+context available on disk for
+# the legacy use case (was claude-opus-4-7 adversarial fresh). Callers can
+# override.
+DEFAULT_MODEL = "claude-opus-4-7"
+DEFAULT_STYLE = "adversarial"
+DEFAULT_CONTEXT = "fresh"
+
+
+def _cell_filename(paper: str, model: str, run: int,
+                   style: str = DEFAULT_STYLE,
+                   context: str = DEFAULT_CONTEXT) -> str:
+    """Reconstruct the canonical cell filename for the given identifiers."""
+    tag = "bare"
+    if style != "adversarial":
+        tag = f"{tag}__{style}"
+    if context != "fresh":
+        tag = f"{tag}__{context}"
+    return f"{paper}__{model}__{tag}__run-{run}.json"
+
+
+def load_run(paper: str, run: int,
+             model: str = DEFAULT_MODEL,
+             style: str = DEFAULT_STYLE,
+             context: str = DEFAULT_CONTEXT) -> dict | None:
+    f = OUT_DIR / _cell_filename(paper, model, run, style, context)
     if not f.exists():
         return None
     return json.loads(f.read_text(encoding="utf-8"))
@@ -297,7 +339,10 @@ def cell_metrics(paper: str) -> list[dict]:
         d = load_run(paper, r)
         if d is None:
             continue
-        cell_file = OUT_DIR / f"{paper}__claude-opus-4-7__bare__run-{r}.json"
+        # FIX (code review #4): use the same filename-builder load_run uses,
+        # so cell_metrics stays in sync if the default model/style/context
+        # changes.
+        cell_file = OUT_DIR / _cell_filename(paper, DEFAULT_MODEL, r)
         out_chars = cell_file.stat().st_size
         # Approximate response chars from issues + summary.
         resp = d["response"]
@@ -414,12 +459,18 @@ def main() -> None:
     metrics_out = Path("experiments/data/raw/study1-replication/multirun-metrics.csv")
     rows = [m for p in PAPERS for m in cell_metrics(p)]
     metrics_out.parent.mkdir(parents=True, exist_ok=True)
-    with metrics_out.open("w", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        for row in rows:
-            w.writerow(row)
-    print(f"Per-cell metrics → {metrics_out} ({len(rows)} rows)")
+    if not rows:
+        # FIX (code review #12): rows[0].keys() raised IndexError when
+        # cell_metrics returned [] for every paper (the common case for
+        # 4.6-only datasets before the load_run hardcode was fixed).
+        print(f"Per-cell metrics → {metrics_out} skipped (no envelope-bearing cells found for model={DEFAULT_MODEL} style={DEFAULT_STYLE} context={DEFAULT_CONTEXT})")
+    else:
+        with metrics_out.open("w", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            for row in rows:
+                w.writerow(row)
+        print(f"Per-cell metrics → {metrics_out} ({len(rows)} rows)")
     print()
     print("Per-paper rough size summary (manuscript_chars / mean response_chars):")
     by_paper = defaultdict(list)
