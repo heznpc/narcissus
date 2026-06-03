@@ -139,21 +139,39 @@ $(cat "$paper_path")
 PROMPT_HEADER
 } > "$prompt_file"
 
-envelope_tmp="${out_path}.envelope.tmp.$$"
+# FIX (code review #7 / design review V2): keep envelope_tmp INSIDE work_dir
+# so the EXIT trap (rm -rf "$work_dir") cleans it even on SIGKILL/early-fail.
+# Previously it lived next to out_path in OUT_DIR and orphaned on every kill.
+# Only the final cell JSON (out_path.tmp, written by Python via os.replace)
+# must be in OUT_DIR for same-filesystem atomic replace — the raw claude
+# output buffer does not.
+envelope_tmp="${work_dir}/envelope.json"
 err_file="${work_dir}/claude.err"
 
 t_start=$(date -u +%s)
-if ! ( cd "$work_dir" && claude --print --disable-slash-commands \
-       --model "$model" --output-format json \
-       < "$prompt_file" > "$envelope_tmp" 2> "$err_file" ); then
-  echo "ERROR: claude failed for $paper_id run $run_id model $model" >&2
-  echo "---stderr---" >&2
-  cat "$err_file" >&2
-  rm -f "$envelope_tmp"
-  exit 3
-fi
+# FIX (design review V1): do NOT early-exit on a nonzero claude rc. A bogus
+# model name makes claude exit nonzero BUT still emit an is_error envelope
+# (e.g. "model may not exist / no access") — that is a PERMANENT config error
+# that must bail fast (exit 4), not loop as a quota wall (exit 3) for 40h.
+# Conversely a transient overload may also exit nonzero. So we always hand
+# whatever envelope was produced to the Python classifier below, and only
+# treat a totally-empty envelope (true crash / network / timeout) as a
+# blind retry.
+claude_rc=0
+( cd "$work_dir" && claude --print --disable-slash-commands \
+    --model "$model" --output-format json \
+    < "$prompt_file" > "$envelope_tmp" 2> "$err_file" ) || claude_rc=$?
 t_end=$(date -u +%s)
 wall_s=$(( t_end - t_start ))
+
+if [[ ! -s "$envelope_tmp" ]]; then
+  # No envelope at all: claude crashed, timed out, or network died before
+  # producing any output. Transient by default — let the launcher retry.
+  echo "ERROR: claude produced no envelope (rc=$claude_rc) for $paper_id run $run_id model $model" >&2
+  echo "---stderr---" >&2
+  cat "$err_file" >&2
+  exit 3
+fi
 
 # Parse envelope, extract response, validate schema, write canonical cell JSON.
 # FIX (code review #5): capture Python's exit code so a schema validation
@@ -165,11 +183,42 @@ python3 - "$envelope_tmp" "$out_path" "$paper_id" "$run_id" "$model" "$wall_s" "
 import json, re, sys, os, datetime as dt
 envelope_path, out_path, paper_id, run_id, requested_model, wall_s, prompt_style, context_mode = sys.argv[1:9]
 
-envelope = json.loads(open(envelope_path, encoding="utf-8").read())
+# An envelope file exists but might not be valid JSON (partial write,
+# truncated stream). Treat unparseable-but-present as TRANSIENT (retry),
+# since a re-run usually produces a clean envelope.
+try:
+    envelope = json.loads(open(envelope_path, encoding="utf-8").read())
+except (json.JSONDecodeError, ValueError) as e:
+    sys.stderr.write(f"envelope present but not parseable JSON (will retry): {e}\n")
+    sys.exit(3)
 
 if envelope.get("is_error"):
-    sys.stderr.write(f"envelope is_error=True: {envelope}\n")
-    sys.exit(4)
+    # FIX (design review V1): is_error conflates TRANSIENT failures
+    # (overload / rate-limit / capacity — retryable) with PERMANENT ones
+    # (model not found / no access / invalid request — bail). The launcher
+    # maps exit 3 -> quota/retry and exit 4 -> deterministic/bail, so we
+    # must split here or a transient 4.8 overload would kill the whole batch
+    # (violating the autonomous-resume requirement). Keyword set mirrors the
+    # original api_client.py QUOTA_KEYWORDS.
+    msg = str(envelope.get("result", "")).lower()
+    TRANSIENT = ("overload", "rate limit", "rate_limit", "ratelimit",
+                 "capacity", "quota", "usage limit", "usage_limit",
+                 "too many requests", "429", "529", "try again",
+                 "temporarily")
+    PERMANENT = ("may not exist", "not exist", "have access", "no access",
+                 "invalid", "not found", "unauthorized", "permission",
+                 "unsupported", "unknown model")
+    if any(k in msg for k in PERMANENT):
+        sys.stderr.write(f"envelope is_error (PERMANENT, will bail): {msg[:300]}\n")
+        sys.exit(4)
+    if any(k in msg for k in TRANSIENT):
+        sys.stderr.write(f"envelope is_error (TRANSIENT, will retry): {msg[:300]}\n")
+        sys.exit(3)   # treated as quota/retry by the launcher
+    # Ambiguous is_error: prefer retry (exit 3) over silent batch-kill, but
+    # the launcher caps retries at max_resets so a persistent ambiguous error
+    # still bails eventually rather than looping forever.
+    sys.stderr.write(f"envelope is_error (AMBIGUOUS, will retry up to cap): {msg[:300]}\n")
+    sys.exit(3)
 
 result_text = envelope.get("result", "").strip()
 
