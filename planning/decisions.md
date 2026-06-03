@@ -123,3 +123,23 @@ All eight fixes are documented in-paper at the corresponding §; bibliography ex
 - §6 added a new limitation "Severity-tier stance dependence" recommending future audits report stance explicitly and aggregate across multiple stances.
 
 **Cost transparency**: 4.6-neutral batch $7.71 ($0.31/cell). About 3.7× cheaper than 4.7-adversarial for substantially the same structural-signal information. The neutral arm completed in ~13 wall minutes (5-way parallel, no quota wall) within a single quota window.
+
+---
+
+## 2026-06-04 -- Opus 4.8 3-point version trend
+
+**Context**: Opus 4.8 released (~2026-06). Same staleness/opportunity logic that motivated the 4.7 arm. Before running, did a design review (V1-V6) and fixed two blocking bugs in the cell runner (transient/permanent error split; envelope_tmp orphan) — see PR #18.
+
+**Decision**: Add a 4.8 Fresh×Adversarial n=5 arm for a balanced 3-point trend (4.6/4.7/4.8, n=5 each, runs 1-5). 25 cells, $39.63, all model_actual=claude-opus-4-8 (exit-8 guard confirmed no fallback).
+
+**Result (compare_3version_trend.py) — did NOT confirm the clean "stable" story**:
+- No version-specific DRIFT: 4.6↔4.8 section-level Jaccard (0.28) ≈ 4.8 within-version self-agreement (0.28) → ceiling effect, not drift.
+- 4.8 is a markedly HIGHER-VARIANCE single-pass reviewer: section-level within-version Jaccard 0.58 (4.6) → 0.46 (4.7) → 0.28 (4.8), monotonic. Fleiss κ 0.286 → 0.207 → 0.028.
+- Partial measurement confound: 4.8 cites sections in multi-ref/prose style (1.39 sec/issue vs 4.6's 1.14); normalizer handles unevenly. Estimated minor (distinct-sections/run comparable: 11.3/13.0/12.2) but not fully separable.
+- Stable-core: narcissus keeps 3 sections unanimous across all 15 runs of all 3 versions; analogic/eddy collapse to 0 (consequence of 4.8 variance, not critique disappearance).
+
+**Reframe**: "stable central tendency, declining single-pass reliability" — NOT "model-architecture-stable." Strengthens H7 (newer models need MORE runs). Reported the inconvenient result deliberately (the paper's own thesis warns against the pull toward the cleaner confirming story; analysis ran on 4.8, the high-variance version).
+
+**Paper updates**: §4.1 added the 3-point-trend paragraph; §6 "Model specificity" reframed to "Model specificity and version reliability" + new "Measurement validity: section-citation style is model-dependent" limitation.
+
+**Cost**: 4.8 = $1.59/cell (~40% > 4.7's $1.14), higher output-token volume. Cumulative Study 1 envelope cohort now ~$108 across 175 cells.
