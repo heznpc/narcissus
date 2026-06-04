@@ -57,36 +57,57 @@
   Palestinian Resistance in TikTok #Challenges.* Social Media + Society.
   DOI: [`10.1177/20563051231157607`](https://journals.sagepub.com/doi/10.1177/20563051231157607).
   A related Frontiers in Communication 2025 paper covers similar territory.
-- **Result**: ✅ HALLUCINATION CONFIRMED. No author named "Melo, G.S."
-  surfaced for any paper matching the described content. The earlier
-  *unverified* designation in the original audit holds; this re-verification
-  expands the candidate match set to Cervi & Divon (2023) but cannot
-  identify a paper authored by "Melo, G.S." in this subfield.
+- **Result (CORRECTED 2026-06-04)**: ⚠️ **INDETERMINATE — not confirmed.**
+  No author named "Melo, G.S." surfaced for any memetic-performance paper
+  across repeated searches (2026-05-21 and 2026-06-04; candidate matches are
+  Cervi & Divon 2023, Miller & Cupchik, Coscia, MacDonald, Peck — none named
+  Melo). **But "could not find it" is NOT "confirmed fabricated":** the paper
+  could be obscure, non-English, or poorly indexed. The narcissus paper's own
+  §2.2 table is appropriately careful here — it lists the actual author as
+  "(unverified)", NOT as a confirmed real alternate. The original label in
+  this document ("✅ HALLUCINATION CONFIRMED") was an **overclaim** — it
+  converted absence-of-evidence into evidence-of-fabrication, the exact
+  inverse error the paper studies. Corrected to INDETERMINATE.
 
-## Aggregate
+## Aggregate (CORRECTED 2026-06-04)
 
-| Outcome | Count | Rate |
+The original "4/4 = 100% HALLUCINATION_CONFIRMED" was an overclaim. Honest
+breakdown after two-directional verification (confirm the real author AND
+search for a competing paper by the "fabricated" author):
+
+| Citation | Status | Basis |
 |---|---|---|
-| HALLUCINATION_CONFIRMED | 4 | 4/4 = 100% |
-| Domain-coherent fabrication (real scholars in same subfield) | 2 (citations 2, 3) | 2/4 = 50% |
-| Wrong-author-but-correct-paper | 4 | 4/4 = 100% |
+| 1 — 12-LMIC play study (Atabey → Iannelli) | ✅ CONFIRMED misattribution | Real paper is Iannelli, Naderbagi et al. (Nature HSSC, 2025); no competing "Atabey" 12-LMIC paper found |
+| 2 — Folk in the Age of Algorithms (Blank & Kitta → Flinterud) | ✅ CONFIRMED misattribution | Real paper is Flinterud (Folklore 134(4), 2023); Blank & Kitta authored a *different* book ("Folk Culture in the Digital Age") — title-conflation pattern |
+| 3 — Roblox Indonesia (UI → UGM) | ◑ PARTIAL | Institutional attribution (CfDS = Univ. Gadjah Mada, not Univ. Indonesia) + blog-vs-report format; not an author hallucination per se |
+| 4 — Memetic performance (Melo, G.S.) | ⚠️ INDETERMINATE | Cannot confirm OR refute; no Melo paper found, but absence ≠ fabrication. Paper itself marks actual author "(unverified)". |
+
+**Corrected count: 2 confirmed author-misattributions, 1 partial
+(institution/format), 1 indeterminate. NOT 4/4.**
 
 ## Interpretation (deliberately limited)
 
 This run does **not** test H5; H5 is reserved for Study 2 (controlled,
 prospective, properly-powered). What this run does establish:
 
-1. The original audit's four hallucination claims survive external
-   verification — they are not artifacts of the first author's
-   classification error.
-2. Two of four hallucinations exhibit the *domain-coherent fabrication*
-   pattern (Citation 2 most cleanly: Blank and Kitta are real folklorists
-   in this exact subfield; the AI did not fabricate names random to the
-   field).
-3. The metadata-error rate (4/4 = 100%) is a degenerate point estimate
-   given n=4; the meaningful claim is binary — *all four flagged cases
-   verify as actual hallucinations*, not that hallucinations occur at
-   100% rate in AI-suggested citations in general.
+1. The two load-bearing hallucination claims (citations 1 and 2) survive
+   rigorous two-directional external verification: the real alternate author
+   exists AND no competing paper by the "fabricated" author was found. These
+   are not first-author classification artifacts and not this verifier's
+   false-positives.
+2. The domain-coherent pattern holds for citation 2 (Blank and Kitta are
+   real folklorists in this exact subfield; the misattribution is to a real
+   adjacent book, not a random name).
+3. **The "4/4 = 100%" figure was a verification overclaim and is retracted.**
+   Two cases are confirmed; one is partial; one is indeterminate. A 100%
+   point estimate from n=4 was degenerate regardless, but the deeper error
+   was labeling an unverifiable case as "confirmed."
+4. **Process-claim limit**: this verification establishes the END STATE
+   (who really wrote each paper), not the PROCESS CLAIM (that the AI actually
+   generated "Atabey"/"Melo" during the original writing). The latter rests
+   on the original audit's notes; the relevant git history is partially lost
+   (see audit-manifest). We can say the citations-as-recorded are
+   misattributed; we cannot independently replay the AI's generation.
 
 ## Reproducibility for this run
 
