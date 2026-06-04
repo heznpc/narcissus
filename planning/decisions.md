@@ -168,3 +168,29 @@ All eight fixes are documented in-paper at the corresponding §; bibliography ex
 **Bug fixed**: ploidy run-4 hit exit 5 (stochastic JSON parse fail) and the batch bailed at 24/25; manual re-run parsed cleanly. Corrected the gemini batch failure taxonomy: output-parse failures (5/6/7) are TRANSIENT (retry, capped), only model-not-found (4)/mismatch (8) bail.
 
 **Cost**: Gemini CLI uses Google credentials (no Claude-Max spend), reports no USD; ~26k in / ~1.3k out / ~3k thinking tokens per cell.
+
+---
+
+## 2026-06-04 -- Research-quality verification: corrected a verification overclaim (Melo)
+
+**Context**: User challenged me to verify the research quality and, specifically, to second-level-verify any "ghost author / hallucination" finding before declaring it fake — citing a pattern where I report real things as false because my own search failed.
+
+**Method**: Two-directional web verification (fetched in-session, 2026-06-04) of every checkable citation claim: (A) confirm the claimed real author exists, (B) search for a competing real paper under the "fabricated" name.
+
+**Findings**:
+- §2.2 citation 1 (12-LMIC play study): CONFIRMED. Real = Iannelli, Naderbagi et al. (Nature HSSC 2025). No "Atabey" 12-LMIC paper exists.
+- §2.2 citation 2 (Folk in the Age of Algorithms): CONFIRMED. Real = Flinterud (Folklore 134(4), 2023). Blank & Kitta wrote a *different* book (Folk Culture in the Digital Age) — title-conflation. Holds.
+- §2.2 citation 3 (Roblox/CfDS): PARTIAL — institution (UGM not UI) / format (blog not report), NOT an author hallucination.
+- §2.2 citation 4 (Melo, memetic performance): **INDETERMINATE**. No Melo paper found across repeated searches, but absence != fabrication. The paper's own table correctly says "(unverified)".
+- My own added citations (Kerr 1998, Wei 2024 arXiv 2308.03958, Lakens 2017, Faul 2007): ALL real, metadata exact (pages + arXiv IDs verified). I did not introduce ghost citations.
+- Narcissus bibliography spot-check (Perez 2212.09251, Sharma 2310.13548, Liu TACL 12:157-173, Nickerson RGP 2(2):175-220): ALL real, metadata exact.
+
+**The real defect found was in MY OWN prior work, not the paper**: experiments/results/hallucination-verification-2026-05-21.md had labeled citation 4 "HALLUCINATION CONFIRMED" and aggregated "4/4 = 100%" — converting "could not find it" into "confirmed fabricated," the exact inverse error the paper studies. The narcissus paper itself was MORE careful (table marks Melo "unverified").
+
+**Corrections applied**:
+- hallucination-verification doc + CSV: citation 4 -> INDETERMINATE; aggregate retracted from "4/4=100%" to "2 confirmed author-misattributions, 1 partial (institution/format), 1 indeterminate"; added a process-claim limit (we verify end-state authorship, not that the AI generated the name — git history partially lost).
+- paper abstract + §2.2: "all four ... fabricated author names" -> "two confirmed author-misattributions, one institutional/format discrepancy, one unverifiable," with an explicit "could not find it != confirmed fabricated" note.
+
+**Not verified this session (flagged, not asserted)**: §2.4 "9 of 11 z-gap references had author errors" — would require auditing z-gap's actual bibliography; left as the original single-rater claim (already labeled exploratory per C6).
+
+**Why**: The paper's load-bearing hallucination examples (Flinterud, Iannelli) survive rigorous two-directional verification — they are real, not my false-positives. But a paper about directional hallucination must not itself over-label an unverifiable case as confirmed, and neither must its verification artifacts. Accuracy tightened in both directions: the confirmed cases stated as confirmed, the unverifiable case stated as unverifiable.
