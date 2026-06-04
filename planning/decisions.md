@@ -143,3 +143,28 @@ All eight fixes are documented in-paper at the corresponding §; bibliography ex
 **Paper updates**: §4.1 added the 3-point-trend paragraph; §6 "Model specificity" reframed to "Model specificity and version reliability" + new "Measurement validity: section-citation style is model-dependent" limitation.
 
 **Cost**: 4.8 = $1.59/cell (~40% > 4.7's $1.14), higher output-token volume. Cumulative Study 1 envelope cohort now ~$108 across 175 cells.
+
+---
+
+## 2026-06-04 -- Cross-vendor arm: Gemini (TODO #2 closed as partial generalization)
+
+**Context**: `gemini` CLI (v0.34.0) available and authenticated; user flagged it might disappear, so ran the long-deferred cross-vendor arm now. First non-Claude data point.
+
+**Decision**: Gemini 3.1-pro-preview Fresh×Adversarial n=5 (25 cells), compared vs Claude Opus 4.6. Vendor-adapted cell runner (run_fresh_review_gemini.sh) emitting the common cell schema so existing analyzers work; minimal gemini batch runner (RPM backoff, not the Claude 5h-reset machinery, since Google quota differs).
+
+**Measurement prerequisite**: Gemini cites sections as bare "N.M Title" (no §/Sec prefix). Extended normalize_section with a bare/separator-leading number rule (_RE_BARE_SEC) or cross-vendor Jaccard would be spuriously ~0 from format mismatch alone. Verified: Claude refs unchanged, "2024"/"p=1.0" rejected, residual "9 of 11"->S9 edge accepted.
+
+**Results (compare_crossvendor.py)**:
+- Issue count: Claude 13.2 vs Gemini 7.7 (Gemini ~40% more parsimonious).
+- Within-vendor: Gemini less self-consistent (section Jaccard 0.22 vs 0.35; κ ~0.13 vs 0.29).
+- Cross-vendor shared magnets (5/5 both vendors): 6 across 5 papers. narcissus shares 3 incl. §2.1 (the headline adversarial-role confound) — Gemini independently + unanimously flags it.
+- Directional precision: of what Gemini flags unanimously, 100% is in Claude's core for narcissus/analogic/z-gap; eddy is §4-area agreement at finer granularity (exact-match scores 0); ploidy reached no Gemini core.
+- Cross-vendor Jaccard 0.177 (least robust; ceiling + style + granularity confounds).
+
+**Conclusion**: PARTIAL generalization concentrated on top critiques. The most consequential structural critiques are model- and vendor-robust; the long tail is model-specific. Do NOT claim universality. Dovetails with the 3-version finding: stable top-tier, vendor/version-dependent depth.
+
+**Paper**: §6 "Model specificity" item expanded to "...and cross-vendor generalization" with the Gemini numbers and the §2.1 cross-vendor reproduction.
+
+**Bug fixed**: ploidy run-4 hit exit 5 (stochastic JSON parse fail) and the batch bailed at 24/25; manual re-run parsed cleanly. Corrected the gemini batch failure taxonomy: output-parse failures (5/6/7) are TRANSIENT (retry, capped), only model-not-found (4)/mismatch (8) bail.
+
+**Cost**: Gemini CLI uses Google credentials (no Claude-Max spend), reports no USD; ~26k in / ~1.3k out / ~3k thinking tokens per cell.
