@@ -41,6 +41,13 @@ _RE_SEC = re.compile(
     re.IGNORECASE,
 )
 _RE_LABEL = re.compile(r"sec:([a-zA-Z0-9_\-]+)", re.IGNORECASE)
+# Bare section number at string start or right after a separator (; , / | vs).
+# Catches Gemini-style "2.1 Three-Session..." / "2. Evidence" / "2.2 / 3.2"
+# without matching mid-sentence numbers. Trailing (?=\D|$) avoids grabbing
+# a number that is really part of a larger figure like "2024".
+_RE_BARE_SEC = re.compile(
+    r"(?:^|[;,/|]\s*|\bvs\.?\s+)(\d{1,2}(?:\.\d{1,2}){0,2})(?=[\s.):]|$)"
+)
 
 
 def _build_label_index() -> dict[str, dict[str, str]]:
@@ -117,8 +124,19 @@ def normalize_section(raw: str, paper_id: str = "") -> tuple[str, ...]:
         return ("(unknown)",)
     out: set[str] = set()
 
-    # 1. Numeric extraction.
+    # 1. Numeric extraction (prefixed: 'Sec N', '§N', 'Section N').
     for h in _RE_SEC.findall(raw):
+        out.add(f"S{h}")
+
+    # 1b. CROSS-VENDOR FIX (Gemini arm): bare section numbers with no
+    # Sec/§ prefix, e.g. Gemini emits '2.1 Three-Session Natural Experiment'
+    # or '2. Evidence' or '2.2 / 3.2 / H5'. Match a number at the START of
+    # the string or immediately after a separator (; , / or 'vs'), so we
+    # catch each section-piece's leading number WITHOUT matching mid-prose
+    # counts like '9 of 11'. Without this, Gemini's refs fall through to the
+    # verbatim fallback and never match Claude's 'S2.1', making the
+    # cross-vendor Jaccard spuriously ~0 even when both flag the same section.
+    for h in _RE_BARE_SEC.findall(raw):
         out.add(f"S{h}")
 
     # 2. LaTeX label form: map to canonical via per-paper index.
